@@ -111,9 +111,62 @@ by observed ranges; real monthly observations anchor and validate those ranges.
 
 ---
 
-## Open questions before Phase 1
+## Open questions — resolved 2026-09-06
 
-- [ ] Confirm 綾瀬川/中川 tile coverage is continuous enough for a contiguous reach
-- [ ] Check whether 埼玉県 常時監視 stations publish sub-daily series (would materially help)
-- [ ] Identify specific MLIT gauge(s) on 綾瀬川/中川 for discharge boundary conditions
-- [ ] Decide reach length and number of cross-sections from actual tile extent
+### ✅ Tile coverage is continuous. Ayase selected as primary.
+
+Enumerated the full tile index by decoding the published vector tiles
+(`https://gic-saitama.s3.ap-northeast-1.amazonaws.com/2025/Vectortile2026/river/{z}/{x}/{y}.pbf`),
+which carry `MESH_NO` and a direct `URL` per tile. **1,385 tiles across 59 rivers.**
+
+| | Ayase (綾瀬川) | Naka (中川) |
+|---|---|---|
+| Tiles | **89** | 53 |
+| Chain length | **29.4 km** | 21.8 km |
+| Median step between tiles | 296 m | 362 m |
+| Max step | 866 m | 743 m |
+| Gaps > 1 km | **0** | **0** |
+| Longest unbroken run | 84 tiles | 53 (all) |
+| Mean tile size | **107 MB** | 616 MB |
+| Total download | **~9.5 GB** | ~32.7 GB |
+
+Both are fully contiguous — no breaks. **Ayase is the primary reach**: 3.4× smaller download,
+longer continuous extent, and the stronger ecological narrative. Naka is held as a
+spatial-validation holdout.
+
+Ayase tiles form two series: `ayasegawa-0240` … `ayasegawa-1050` in steps of 10 (82 tiles,
+the contiguous mainstem) plus 7 tiles numbered `0011`–`0191` from a separate survey block.
+
+**Reach decision:** ~29 km of Ayase mainstem. At 500 m cross-section spacing that yields
+~58 sections — the original plan's "10 cross-sections" was arbitrary and is superseded.
+
+### ✅ No sub-daily monitoring exists. Monthly confirmed — but richer than expected.
+
+`常時監視` is the legal name of the monitoring *programme* under 水質汚濁防止法, **not**
+high-frequency instrumentation. Verified against
+[`r06_suishitsu_data.xlsx`](https://www.pref.saitama.lg.jp/documents/15286/r06_suishitsu_data.xlsx)
+(FY2024 検体値, 1,257 rows × 221 columns): **exactly 12 samples per station per year.**
+
+12 stations cover the system across 5 water bodies — 綾瀬川上流, 綾瀬川下流, 古綾瀬川,
+中川上流, 中川中流.
+
+**The useful surprise:** each sample row carries co-measured **水温 (water temp), 気温 (air
+temp) and 流量 (discharge)** alongside the chemistry, at the same instant. So discharge–water
+quality relationships can be built entirely from this one file, without joining to
+`river.go.jp` at all. That materially reduces the manual-download burden — river.go.jp is
+still needed for hourly discharge *boundary conditions*, but not for the observational anchor.
+
+### Point cloud characteristics (verified against `ayasegawa-0610`)
+
+- LAS 1.2, point format 2 (RGB present), ~2.6 M points per 270 × 356 m tile — **~27 pts/m²**
+- **CRS: EPSG:6677 with `x` = easting, `y` = northing.** Verified by round-tripping the tile
+  centroid: 10 m agreement, versus 16 km for the swapped (Japanese X=north) convention.
+  Getting this backwards would misplace every cross-section.
+- ⚠️ **All points are classification 1 (unclassified).** There is no ground class to filter
+  on, so bed extraction must derive bare-earth itself (per-cell low quantile) rather than
+  selecting `classification == 2`.
+- Zip → LAS expands ~2×: a 33 MB zip yields a 68 MB LAS.
+
+### Still open
+
+- [ ] Identify MLIT gauge(s) on 綾瀬川 for hourly discharge boundary conditions (manual pull)
