@@ -93,7 +93,8 @@ gradient is worth more to this project than a synthetic one.
 - [x] Docs: DATA_SOURCES.md
 - [x] Water quality loader (MOE / Saitama 検体値) + download script
 - [ ] HEC-RAS runner (executes simulations programmatically)
-- [ ] Data preprocessor (merge HEC-RAS + monitoring data)
+- [x] Feature engineering (preprocessor)
+- [x] Synthetic HSI label generator + falsification against real observations
 - [ ] Data validator (quality checks)
 - [ ] Notebook: 01_hecras_workflow.ipynb
 - [ ] Notebook: 02_data_exploration.ipynb

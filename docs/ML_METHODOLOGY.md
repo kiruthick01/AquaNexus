@@ -108,6 +108,71 @@ supersaturation is itself a eutrophication signal.
 
 ---
 
+## Synthetic labels — corrections to §4
+
+Implemented in `aquanexus.data.synthetic`.
+
+### Habitat profile: the spec named the wrong fish
+
+§4.2 specifies coldwater fish (trout, char) — which do not live in the Ayase, a
+lowland Kanto river reaching 32.5 °C. Under trout optima every summer sample scores
+essentially zero, destroying the signal. `LOWLAND_WARMWATER` (eurythermal cyprinids
+— オイカワ, コイ, フナ) is the default; `COLDWATER` retains the spec's parameters
+for comparison.
+
+### Four structural errors in §4.3
+
+1. **DO used a two-sided Gaussian**, penalising high oxygen as hard as low. At
+   `optimal=10, std=2`, a real observed 17.0 mg/L scores 0.002 — rated as harmful as
+   3.0 mg/L. Replaced with a plateau, plus a separate penalty only for extreme
+   supersaturation (which genuinely causes gas-bubble trauma).
+2. **The interaction penalty's branches were mis-ordered.** With the spec's
+   `if/elif`, 26 °C at 3.5 mg/L takes the first branch (−0.15) while the *milder*
+   23 °C at 3.5 mg/L takes the second (−0.20) — worse conditions cost less. Replaced
+   with a smooth monotonic term.
+3. **Sediment thresholds were set for a sediment-laden river.** Only 0.5% of Ayase
+   samples exceed the spec's 50 mg/L trigger, making the term nearly inert.
+4. **The arithmetic mean let good factors offset lethal ones.** At 33 °C with
+   2.5 mg/L DO, optimal depth and velocity scoring 1.0 each pulled HSI to 0.58 —
+   "moderate" habitat for unbreathable water. Switched to the **geometric mean**
+   (standard HSI practice) plus an explicit **acute-survival multiplier**, since
+   below ~1.5–3 mg/L fish asphyxiate regardless of everything else. Lethal
+   thresholds are profile parameters: cyprinids tolerate oxygen that kills salmonids.
+
+## Falsification result
+
+Run against 216 real Ayase observations, restricted to a 15–30 °C band:
+
+```
+lowland_warmwater      n_in_band=124
+  HSI  DO<5   0.617 (n=30)   <   DO>=8   0.781 (n=13)     ✓
+  HSI  stressed 0.563 (n=28) <   benign  0.830 (n=18)     ✓
+  spearman(HSI, DO) = 0.761                            => PASS
+```
+
+**Temperature banding is essential, and getting it wrong inverted the verdict.** The
+first version compared DO groups across all samples and reported DO<5 at 0.585
+*above* DO≥8 at 0.505 — apparently backwards. The cause was confounding, not a broken
+label: dissolved oxygen anti-correlates with temperature, so the most oxygen-rich
+samples are winter water, which scores poorly for a warmwater guild. Comparing like
+with like reverses it. The Spearman coefficient is reported as a diagnostic only, for
+the same reason.
+
+Resulting seasonal curve on real data — spring peak, summer depression from combined
+heat and hypoxia, winter depression from cold:
+
+| Month | 1 | 4 | 5 | 8 | 9 | 12 |
+|---|---|---|---|---|---|---|
+| water temp (°C) | 8.4 | 19.6 | 19.5 | 31.1 | 28.8 | 12.3 |
+| DO (mg/L) | 9.0 | 8.5 | 6.8 | 5.3 | 4.7 | 7.1 |
+| **HSI** | **0.39** | **0.79** | **0.85** | **0.62** | **0.64** | **0.54** |
+
+Label distribution: mean 0.648, sd 0.199 — close to the mean 0.628 / sd 0.185 that
+ML_STRATEGY §4.5 anticipated.
+
+This does not make the labels real. It makes them refutable, and they currently
+survive refutation.
+
 ## Validation splits — revised
 
 §5's temporal split does not apply; there is no chronology to split on.
