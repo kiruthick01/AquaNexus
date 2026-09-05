@@ -86,32 +86,51 @@ gradient is worth more to this project than a synthetic one.
 ---
 
 ### 1b. HEC-RAS Integration & Data Loading
-- [ ] HEC-RAS reader (reads .ras files, extracts metadata)
+- [x] Point cloud ingest (tile index, download, LAS loading)
+- [x] Cross-section extraction from point cloud
+- [x] HEC-RAS geometry export (.g01) + reader with round-trip test
+- [x] Unit tests for hecras module (45 passing)
+- [x] Docs: DATA_SOURCES.md
 - [ ] HEC-RAS runner (executes simulations programmatically)
-- [ ] Japanese river data loader (NIES/open data source)
+- [ ] Water quality loader (MOE / Saitama 検体値)
 - [ ] Data preprocessor (merge HEC-RAS + monitoring data)
 - [ ] Data validator (quality checks)
 - [ ] Notebook: 01_hecras_workflow.ipynb
 - [ ] Notebook: 02_data_exploration.ipynb
-- [ ] Docs: HECRAS_GUIDE.md, DATA_SOURCES.md
-- [ ] Unit tests for hecras module
+- [ ] Docs: HECRAS_GUIDE.md
 
-**Date Started**: _______________  
-**Date Completed**: _______________  
+**Date Started**: 2026-09-06  
+**Date Completed**: in progress  
 
-**HEC-RAS Version**: _______________  
-**River Selected**: _______________  
-**Data Source**: _______________  
+**HEC-RAS Version**: 6.5 (target; not yet exercised)  
+**River Selected**: 綾瀬川 Ayase, Saitama — 89 tiles, 29.4 km, fully contiguous  
+**Data Source**: 埼玉県 河川点群データ (CC BY 4.0), UAV + narrow multibeam  
 
-**Sample Output** (first 5 rows of environmental state vector):
+**Sample Output** (cross-sections from tile ayasegawa-0610, 100 m spacing):
 ```
-[Paste DataFrame head()]
+RS  15400.0  invert   5.17 m  width  126 m  (7,482 pts)
+RS  15500.0  invert   5.22 m  width   98 m  (6,165 pts)
+RS  15600.0  invert   5.34 m  width   66 m  (4,333 pts)
 ```
+Invert rises with river station, i.e. bed rises upstream — the expected sign.
+Standalone extraction on the same tile gave 5.19 m, so the two paths agree.
 
 **Issues Encountered**:
-- [ ] None
-- [ ] [Issue 1]: [Resolution]
-- [ ] [Issue 2]: [Resolution]
+- [x] **No ground classification.** Every point in the published tiles is class 1,
+      so there is no `classification == 2` filter for bare earth. Resolved by
+      binning across the section and taking a low elevation quantile per bin
+      (`bed_quantile`, default 0.05). The minimum would be the obvious choice but
+      latches onto multibeam outliers; the quantile rejects both canopy above and
+      stray returns below. Covered by a regression test that adds a vegetation
+      canopy and asserts the thalweg does not move.
+- [x] **Axis-order ambiguity.** Japan's plane rectangular convention is X=north,
+      Y=east, the opposite of GIS convention. The tiles use x=easting. Verified by
+      round-tripping a tile centroid through EPSG:6677: 10 m agreement vs 16 km for
+      the swapped order. Had this gone unnoticed every cross-section would have been
+      misplaced by ~16 km.
+- [x] **Tile index is not published as a file.** It only exists inside the Mapbox
+      vector tiles behind the prefecture's web map. Recovered by decoding those tiles;
+      each polygon carries MESH_NO and a direct download URL.
 
 **Commit**:
 ```

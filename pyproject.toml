@@ -42,6 +42,7 @@ geo = [
     "rasterio>=1.3",
     "laspy[lazrs]>=2.5",
     "pyproj>=3.6",
+    "mapbox-vector-tile>=2.1",
 ]
 api = [
     "fastapi>=0.111",
