@@ -4,6 +4,7 @@
 returns a namespaced child logger.
 """
 
+import contextlib
 import logging
 import sys
 
@@ -25,10 +26,10 @@ def _configure() -> None:
     # defaults to cp1252, which renders them as \uXXXX escapes; reconfigure to
     # UTF-8 and replace anything the terminal still cannot draw.
     if hasattr(stream, "reconfigure"):
-        try:
+        # Suppressed: the stream may be detached or non-reconfigurable, in which
+        # case the default encoding is the best available and still usable.
+        with contextlib.suppress(OSError, ValueError):
             stream.reconfigure(encoding="utf-8", errors="replace")
-        except (OSError, ValueError):  # detached or non-reconfigurable stream
-            pass
 
     handler = logging.StreamHandler(stream)
     handler.setFormatter(logging.Formatter(_FORMAT, datefmt=_DATEFMT))
