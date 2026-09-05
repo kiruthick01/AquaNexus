@@ -20,7 +20,17 @@ def _configure() -> None:
     if _CONFIGURED:
         return
 
-    handler = logging.StreamHandler(sys.stderr)
+    stream = sys.stderr
+    # Station and river names are Japanese throughout. A Windows console
+    # defaults to cp1252, which renders them as \uXXXX escapes; reconfigure to
+    # UTF-8 and replace anything the terminal still cannot draw.
+    if hasattr(stream, "reconfigure"):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):  # detached or non-reconfigurable stream
+            pass
+
+    handler = logging.StreamHandler(stream)
     handler.setFormatter(logging.Formatter(_FORMAT, datefmt=_DATEFMT))
 
     root = logging.getLogger("aquanexus")

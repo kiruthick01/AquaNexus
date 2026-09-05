@@ -91,8 +91,8 @@ gradient is worth more to this project than a synthetic one.
 - [x] HEC-RAS geometry export (.g01) + reader with round-trip test
 - [x] Unit tests for hecras module (45 passing)
 - [x] Docs: DATA_SOURCES.md
+- [x] Water quality loader (MOE / Saitama 検体値) + download script
 - [ ] HEC-RAS runner (executes simulations programmatically)
-- [ ] Water quality loader (MOE / Saitama 検体値)
 - [ ] Data preprocessor (merge HEC-RAS + monitoring data)
 - [ ] Data validator (quality checks)
 - [ ] Notebook: 01_hecras_workflow.ipynb
@@ -131,6 +131,28 @@ Standalone extraction on the same tile gave 5.19 m, so the two paths agree.
 - [x] **Tile index is not published as a file.** It only exists inside the Mapbox
       vector tiles behind the prefecture's web map. Recovered by decoding those tiles;
       each polygon carries MESH_NO and a direct download URL.
+- [x] **Censored water quality values.** ~9,400 values per year are flagged `<`, where
+      the reported number is the detection limit rather than a measurement. Treating
+      those as measurements biases every statistic upward. The loader keeps the value
+      as published and records the qualifier separately; `apply_censoring()` applies a
+      policy (half-DL by default) as an explicit, separate step. Values flagged `>`
+      are never substituted - an over-range reading is a real lower bound.
+- [x] **Windows console mangled Japanese log output** (綾瀬川 printed as escapes).
+      Logger now reconfigures the stream to UTF-8, guarded for detached streams.
+
+**Observed data loaded** (3 fiscal years, 3,892 samples; Ayase = 216 across 5 stations):
+```
+      water_temp  discharge  DO    BOD   TN    TP
+2022       21.98      21.60  5.93  2.11  2.82  0.19
+2023       18.80      14.41  7.30  2.85  3.41  0.24
+2024       19.47      16.89  6.70  2.55  3.14  0.22
+
+DO vs temperature:  >25 C -> 5.13 mg/L (n=59)   <15 C -> 8.74 mg/L (n=72)
+```
+The thermal-oxygen coupling is present in the real observations, which is the
+relationship the habitat model is supposed to reproduce. It also gives a genuine
+check on the synthetic labels: if the generated HSI does not degrade under the
+warm/low-DO conditions seen here, the label function is wrong.
 
 **Commit**:
 ```
