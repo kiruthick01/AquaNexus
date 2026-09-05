@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Data — large binaries and derived artefacts stay out of git.
+# LAS tiles from the Saitama release average ~520 MB each.
+data/raw/*
+data/processed/*
+data/hecras/*
+data/models/*
+data/cache/*
+!data/**/.gitkeep
+*.las
+*.laz
+*.tif
+*.zip
+
+# HEC-RAS run artefacts
+*.O0*
+*.r0*
+*.p0*.hdf
+*.dss
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/build/
+.env.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

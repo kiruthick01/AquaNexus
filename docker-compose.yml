@@ -1,0 +1,16 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      API_DEBUG: "true"
+      LOG_LEVEL: DEBUG
+    volumes:
+      # Source is mounted for reload; data is mounted so the container reads
+      # the same HEC-RAS outputs and trained models the host produced.
+      - ./src:/app/src:ro
+      - ./data:/app/data
+    command: >
+      uvicorn aquanexus.api.app:app
+      --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src
