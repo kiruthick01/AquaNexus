@@ -1,0 +1,18 @@
+# Normalise to LF in the repository. Without this, files authored on Windows
+# arrive CRLF inside the Linux container and break shell/entrypoint execution.
+* text=auto eol=lf
+
+*.py     text eol=lf
+*.toml   text eol=lf
+*.md     text eol=lf
+*.yml    text eol=lf
+*.json   text eol=lf
+Dockerfile text eol=lf
+
+# Binaries and survey data
+*.las    binary
+*.laz    binary
+*.tif    binary
+*.zip    binary
+*.joblib binary
+*.ipynb  text eol=lf
