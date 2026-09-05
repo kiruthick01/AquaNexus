@@ -92,7 +92,8 @@ gradient is worth more to this project than a synthetic one.
 - [x] Unit tests for hecras module (45 passing)
 - [x] Docs: DATA_SOURCES.md
 - [x] Water quality loader (MOE / Saitama 検体値) + download script
-- [ ] HEC-RAS runner (executes simulations programmatically)
+- [x] HEC-RAS runner (COM controller; geometry load verified against 7.0)
+- [ ] Steady-flow computation (geometry loads; compute still rejects input)
 - [x] Feature engineering (preprocessor)
 - [x] Synthetic HSI label generator + falsification against real observations
 - [ ] Data validator (quality checks)
@@ -103,7 +104,7 @@ gradient is worth more to this project than a synthetic one.
 **Date Started**: 2026-09-06  
 **Date Completed**: in progress  
 
-**HEC-RAS Version**: 6.5 (target; not yet exercised)  
+**HEC-RAS Version**: 7.0 April 2026 (installed; COM controller verified)  
 **River Selected**: 綾瀬川 Ayase, Saitama — 89 tiles, 29.4 km, fully contiguous  
 **Data Source**: 埼玉県 河川点群データ (CC BY 4.0), UAV + narrow multibeam  
 
@@ -138,6 +139,17 @@ Standalone extraction on the same tile gave 5.19 m, so the two paths agree.
       as published and records the qualifier separately; `apply_censoring()` applies a
       policy (half-DL by default) as an explicit, separate step. Values flagged `>`
       are never substituted - an over-range reading is a real lower bound.
+- [x] **Generated .g01 loaded as an empty model.** HEC-RAS reported zero rivers with
+      no error. Four elements are required that look cosmetic: river/reach names padded
+      to exactly 16 characters, a `Reach XY` centreline, and per-section `XS GIS Cut
+      Line` / `#Mann` / `Bank Sta` / `XS Rating Curve` / `Exp/Cntr` blocks. Verified
+      fixed through the COM controller - 1 river, 6 sections, correct station order.
+- [x] **The plan selects the geometry, not the project.** A .prj naming `Geom File=g01`
+      still gives an empty CurrentGeomFile until a .p01 exists and `Current Plan` names it.
+- [x] **A dangling sidecar reference hangs COM automation.** `Unsteady File=u01` with no
+      .u01 on disk raises a modal dialog; over COM the call blocks forever with no error
+      and leaves orphaned Ras.exe processes. `validate_project()` now checks for this
+      before opening anything, and RasController kills surviving processes on exit.
 - [x] **Windows console mangled Japanese log output** (綾瀬川 printed as escapes).
       Logger now reconfigures the stream to UTF-8, guarded for detached streams.
 

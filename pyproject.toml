@@ -51,6 +51,8 @@ api = [
     "python-multipart>=0.0.9",
 ]
 dashboard = ["streamlit>=1.36"]
+# Windows only: drives HEC-RAS through its COM automation server.
+hecras = ["pywin32>=306; sys_platform == 'win32'"]
 dev = [
     "pytest>=8.2",
     "pytest-cov>=5.0",

@@ -44,7 +44,11 @@ class Settings(BaseSettings):
     CRS_EPSG: int = 6677
 
     # --- HEC-RAS ---
-    HECRAS_EXE: Path = Path(r"C:\Program Files (x86)\HEC\HEC-RAS\6.5\Ras.exe")
+    # Verified against HEC-RAS 7.0 (April 2026) via its COM controller. If this
+    # path is wrong, runner.find_hecras_exe() falls back to scanning the install
+    # root, so a version bump does not break the pipeline.
+    HECRAS_EXE: Path = Path(r"C:\Program Files (x86)\HEC\HEC-RAS\7.0\Ras.exe")
+    HECRAS_VERSION: str = "7.00"  # written into generated .g01 headers
     HECRAS_TIMEOUT: int = 600  # seconds per simulation run
 
     # --- ML ---

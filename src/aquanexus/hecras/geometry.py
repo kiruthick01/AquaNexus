@@ -253,30 +253,105 @@ def to_hecras_geometry(
     title: str = "AquaNexus",
     river: str = "Ayase",
     reach: str = "Main",
+    version: str = "7.00",
+    manning_channel: float = 0.035,
+    manning_overbank: float = 0.06,
+    bank_fraction: float = 0.35,
 ) -> str:
     """Serialise sections to HEC-RAS .g01 geometry format.
 
-    HEC-RAS orders cross-sections by descending river station, so this reverses
-    the upstream-increasing stationing used internally.
-    """
-    lines = [f"Geom Title={title}", "Program Version=6.50", "", f"River Reach={river},{reach}", ""]
+    Verified against HEC-RAS 7.0 via the COM controller: the emitted file loads
+    with the expected river, reach and cross-section stations. Several elements
+    are not optional even though they look cosmetic, and omitting them makes
+    HEC-RAS silently report zero rivers rather than raise an error:
 
-    for xs in sorted(sections, key=lambda s: s.river_station, reverse=True):
+    * river and reach names are **fixed-width, padded to 16 characters**
+    * ``Reach XY`` must carry the reach centreline, 16-character fields, two
+      points per line
+    * every cross-section needs ``XS GIS Cut Line``, ``#Mann``, ``Bank Sta``,
+      ``XS Rating Curve`` and ``Exp/Cntr``
+    * station/elevation pairs are 8-character fields, five pairs per line
+
+    Sections are written in descending river station, as HEC-RAS requires.
+    """
+    ordered = sorted(sections, key=lambda s: s.river_station, reverse=True)
+
+    def f8(v: float) -> str:
+        return f"{v:8.2f}"
+
+    def f16(v: float) -> str:
+        return f"{v:16.4f}"
+
+    lines = [f"Geom Title={title}", f"Program Version={version}"]
+
+    if ordered:
+        xs_all = [s.origin[0] for s in ordered]
+        ys_all = [s.origin[1] for s in ordered]
+        pad = 500.0
+        lines.append(
+            f"Viewing Rectangle= {min(xs_all) - pad:.0f} , {max(xs_all) + pad:.0f} , "
+            f"{min(ys_all) - pad:.0f} , {max(ys_all) + pad:.0f}"
+        )
+    lines.append("")
+    lines.append(f"River Reach={river:<16},{reach:<16}")
+
+    if ordered:
+        lines.append(f"Reach XY= {len(ordered)} ")
+        row: list[str] = []
+        for s in ordered:
+            row += [f16(s.origin[0]), f16(s.origin[1])]
+            if len(row) == 4:
+                lines.append("".join(row))
+                row = []
+        if row:
+            lines.append("".join(row))
+        cx = sum(xs_all) / len(xs_all)
+        cy = sum(ys_all) / len(ys_all)
+        lines.append(f"Rch Text X Y={cx},{cy},0,0")
+    lines.append("Reverse River Text= 0 ")
+    lines.append("")
+
+    for i, xs in enumerate(ordered):
         if xs.is_empty:
             continue
+        # Downstream reach lengths: distance to the next section downstream.
+        nxt = 0.0 if i == len(ordered) - 1 else abs(
+            ordered[i + 1].river_station - xs.river_station
+        )
+        lines.append(
+            f"Type RM Length L Ch R = 1 ,{xs.river_station:<8.0f},{nxt:.0f},{nxt:.0f},{nxt:.0f}"
+        )
+
+        # Cut line normal to flow through the section origin.
+        ox, oy = xs.origin
+        dx, dy = xs.direction
+        nx, ny = -dy, dx
+        half = xs.width / 2.0 if xs.width else 1.0
+        lines.append("XS GIS Cut Line=2")
+        lines.append(
+            f16(ox - nx * half) + f16(oy - ny * half)
+            + f16(ox + nx * half) + f16(oy + ny * half)
+        )
+
         n = len(xs.station)
-        lines.append(f"Type RM Length L Ch R = 1 ,{xs.river_station:.2f},,,")
-        lines.append(f"#Sta/Elev= {n}")
+        lines.append(f"#Sta/Elev= {n} ")
+        cells = [f8(st) + f8(el) for st, el in zip(xs.station, xs.elevation, strict=True)]
+        for k in range(0, len(cells), 5):
+            lines.append("".join(cells[k : k + 5]))
 
-        # Fixed-width pairs, 5 pairs per line, 8 characters per field.
-        cells = []
-        for st, el in zip(xs.station, xs.elevation, strict=True):
-            cells.append(f"{st:8.2f}{el:8.2f}")
-        for i in range(0, len(cells), 5):
-            lines.append("".join(cells[i : i + 5]))
-
-        lines.append("#Mann= 3 , 0 , 0")
-        lines.append("     0     .1       0")
+        lo, hi = float(xs.station.min()), float(xs.station.max())
+        span = hi - lo
+        left_bank = lo + span * bank_fraction
+        right_bank = hi - span * bank_fraction
+        lines.append("#Mann= 3 , 0 , 0 ")
+        lines.append(
+            f8(lo) + f8(manning_overbank) + f8(0)
+            + f8(left_bank) + f8(manning_channel) + f8(0)
+            + f8(right_bank) + f8(manning_overbank) + f8(0)
+        )
+        lines.append(f"Bank Sta={left_bank:.2f},{right_bank:.2f}")
+        lines.append("XS Rating Curve= 0 ,0")
+        lines.append("Exp/Cntr=0.3,0.1")
         lines.append("")
 
     return "\n".join(lines) + "\n"

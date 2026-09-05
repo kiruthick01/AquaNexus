@@ -216,7 +216,9 @@ def test_geometry_export_structure():
     sections = extract_sections(pts, line, spacing=200.0)
     text = to_hecras_geometry(sections, river="Ayase", reach="Main")
 
-    assert "River Reach=Ayase,Main" in text
+    # Names are padded to 16 characters. This is not cosmetic: without the
+    # padding HEC-RAS 7.0 loads the file and reports zero rivers.
+    assert f"River Reach={'Ayase':<16},{'Main':<16}" in text
     assert text.count("#Sta/Elev=") == len(sections)
 
     # HEC-RAS requires descending river station down the file.
@@ -249,3 +251,85 @@ def test_geometry_export_pair_counts_match_header():
 
 def test_export_handles_empty_list():
     assert "River Reach=" in to_hecras_geometry([])
+
+
+# ---------------------------------------------------------------------------
+# HEC-RAS 7.0 format requirements
+# ---------------------------------------------------------------------------
+#
+# Each element below was verified necessary against a real HEC-RAS 7.0 install
+# through the COM controller. Omitting any of them makes HEC-RAS report zero
+# rivers rather than raise an error, so these are regression guards.
+
+
+def _sample_geometry():
+    pts = synthetic_channel(length=600.0)
+    line = np.column_stack((np.arange(0, 601, 100.0), np.zeros(7)))
+    return to_hecras_geometry(extract_sections(pts, line, spacing=200.0))
+
+
+def test_river_and_reach_names_are_padded_to_16_chars():
+    for ln in _sample_geometry().splitlines():
+        if ln.startswith("River Reach="):
+            river, reach = ln[len("River Reach="):].split(",")
+            assert len(river) == 16 and len(reach) == 16
+            break
+    else:
+        raise AssertionError("no River Reach line emitted")
+
+
+def test_reach_centreline_is_emitted():
+    text = _sample_geometry()
+    assert "Reach XY=" in text
+    assert "Rch Text X Y=" in text
+    assert "Reverse River Text=" in text
+
+
+def test_each_section_carries_the_required_blocks():
+    text = _sample_geometry()
+    n = text.count("#Sta/Elev=")
+    assert n > 0
+    for marker in ("XS GIS Cut Line=", "#Mann=", "Bank Sta=",
+                   "XS Rating Curve=", "Exp/Cntr="):
+        assert text.count(marker) == n, marker
+
+
+def test_bank_stations_lie_inside_the_section():
+    text = _sample_geometry()
+    lines = text.splitlines()
+    for i, ln in enumerate(lines):
+        if not ln.startswith("Bank Sta="):
+            continue
+        left, right = (float(v) for v in ln.split("=")[1].split(","))
+        assert left < right
+        # Recover this section's station range from the block above.
+        for j in range(i, 0, -1):
+            if lines[j].startswith("#Sta/Elev="):
+                vals = []
+                for body in lines[j + 1:]:
+                    if body.startswith("#"):
+                        break
+                    vals += [float(body[k:k + 8]) for k in range(0, len(body), 8)
+                             if body[k:k + 8].strip()]
+                stations = vals[0::2]
+                assert min(stations) <= left and right <= max(stations)
+                break
+
+
+def test_station_elevation_uses_8_char_fields_five_pairs_per_line():
+    lines = _sample_geometry().splitlines()
+    for i, ln in enumerate(lines):
+        if not ln.startswith("#Sta/Elev="):
+            continue
+        for body in lines[i + 1:]:
+            if body.startswith("#"):
+                break
+            assert len(body) % 8 == 0
+            assert len(body) <= 80  # five pairs
+
+
+def test_program_version_is_configurable():
+    pts = synthetic_channel(length=400.0)
+    line = np.column_stack((np.arange(0, 401, 100.0), np.zeros(5)))
+    secs = extract_sections(pts, line, spacing=200.0)
+    assert "Program Version=6.50" in to_hecras_geometry(secs, version="6.50")
