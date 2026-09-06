@@ -376,6 +376,67 @@ These are partial-dependence curves: they describe what the model does, not what
 the river does. Holding correlated features at their median produces combinations
 that may never occur.
 
+## Phase 2c — validation and baselines
+
+`aquanexus.ml.validator`. All figures grouped-CV, each station held out.
+
+| model | RMSE | MAE | R² | skill |
+|---|---|---|---|---|
+| **linear (Ridge)** | **1.713** | 1.232 | **0.442** | 0.442 |
+| **persistence** | 1.818 | **1.213** | 0.385 | 0.385 |
+| random_forest | 1.879 | 1.417 | 0.329 | 0.329 |
+| xgboost | 1.904 | 1.409 | 0.311 | 0.311 |
+| mean (floor) | 2.294 | 1.779 | 0.000 | 0.000 |
+| hydraulic-only | 2.467 | 1.862 | −0.157 | −0.157 |
+
+### The result that should temper everything else
+
+**The model beats persistence by 0.057 R² — and loses to it on MAE.**
+
+"Same dissolved oxygen as last month at this station" scores R² 0.385 against the
+model's 0.442, with a *lower* median error (1.213 vs 1.232 mg/L). For a slowly
+varying quantity sampled monthly that is a strong baseline, and it is the one the
+spec's comparison table would have omitted.
+
+The model is not useless — it works at sites and times with no previous sample,
+which persistence cannot do at all, and it generalises to a station never seen.
+But the honest headline is *"marginally better than assuming no change"*, not
+*"R² 0.44"*.
+
+**Hydraulics alone score −0.157**, worse than the mean. Consistent with the
+earlier ablation: dissolved oxygen is thermally driven first, and hydraulics
+modulate rather than determine it.
+
+### Spatial validation — each station held out
+
+| station | n | observed mean | RMSE | bias |
+|---|---|---|---|---|
+| 55畷橋 | 36 | 8.36 | 2.206 | −1.540 |
+| 54槐戸橋 | 36 | 7.39 | 1.793 | −0.444 |
+| 57綾瀬川合流点前 | 18 | 6.27 | 1.439 | +1.205 |
+| 52内匠橋 | 48 | 6.15 | 1.266 | +0.115 |
+
+The model regresses toward the reach mean: it under-predicts the most oxygenated
+station by 1.5 mg/L and over-predicts the least by 1.2. With four stations it
+cannot learn site-specific behaviour it has never seen.
+
+### Event-based validation — tails of discharge
+
+| band | n | mean discharge | RMSE | bias |
+|---|---|---|---|---|
+| low tail | 21 | 1.1 m³/s | **2.532** | **−2.011** |
+| middle | 96 | 13.2 | 1.634 | −0.043 |
+| high tail | 21 | 51.8 | 0.818 | +0.103 |
+
+**At low flow the model under-predicts oxygen by 2 mg/L** and its error is triple
+the high-flow case. That is the worst possible place for this weakness: drought
+is when oxygen stress actually threatens habitat, so the model is least reliable
+exactly where it would be consulted. Likely because low-flow rows are scarce and
+the hydraulic interpolation is clamped at the bottom of the swept range.
+
+Reported here rather than buried: any operational use should treat low-flow
+predictions as unreliable.
+
 ## Benchmarks — to re-derive
 
 The R² 0.80–0.88 in §9 was set against the hourly-series design and should not be

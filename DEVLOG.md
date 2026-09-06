@@ -8,6 +8,33 @@
 
 ---
 
+---
+
+## Daily Log
+
+Short notes. Detail lives in `docs/` — this is just what happened when.
+
+### 2026-09-05
+- Read plan + ML strategy. No code yet.
+- Flagged two risks: synthetic labels are circular; data sources unverified.
+
+### 2026-09-06
+- **Data audit.** Yodo has no open bathymetry → switched to Ayase (Saitama). river.go.jp blocks scraping. Dataset design changed to designed-experiment.
+- **Scaffold + Phase 1a.** Package, config, Docker, CI-ready. Repo pushed.
+- **Point cloud ingest.** Tile index recovered from vector tiles (not published as a file). 89 Ayase tiles, contiguous, 29.4 km. CRS axis order verified (x=easting; swapped is 16 km off).
+- **Water quality loader.** 3,892 samples FY2022–24. ~9,400 censored values/yr handled explicitly.
+- **Features + synthetic labels.** Found 4 structural errors in ML_STRATEGY §3–4 (unbounded oxygen formula, sigmoid that ignores cold, mis-ordered penalty branches, arithmetic mean masking lethal conditions). Falsification test passes on real data.
+- **HEC-RAS working.** v7.0 via COM. Bank stations must exist in the station list — that was the blocker. Plan file needs ~200 keys, so templated from a reference project the user built.
+- **Full reach.** 89 tiles (9.5 GB), 53 sections, 27.5 km, 3 profiles computed. Bed falls 0.39 m/km — right sign. Validator: 0 errors, 20 warnings (4 constrictions).
+- **Validator, notebooks, HEC-RAS guide.** Parallel downloads (16 → 500 MB/min).
+- **Phase 2a.** State vectors (7,314 rows). R² 0.99 on synthetic labels — flagged as function recovery, not skill.
+- **Course correction.** Raised that the ML was circular. Found real biology data (河川水辺の国勢調査) — n=6 for Ayase, too small to train, good for validation.
+- **Real ML target added.** Observed DO, n=138. R² 0.44 grouped CV. Ayase runs ~2.4 mg/L below saturation.
+- **Phase 2b.** SHAP. temp × discharge synergistic at −1.02 mg/L. 12 collinear pairs → 2 of 4 interactions unidentifiable, reported as such.
+- **Phase 2c.** Validation + baselines. Model beats persistence by only 0.06 R². Under-predicts DO by 2 mg/L at low flow.
+
+---
+
 ## Project Overview
 
 AquaNexus is a **proof-of-concept system** demonstrating competency in:
@@ -446,6 +473,14 @@ primarily driven by adequate dissolved oxygen and flow conditions."
 ---
 
 ### 2c. Model Validation & Baselines
+- [x] Three specified baselines (hydraulic-only, linear, persistence)
+- [x] Spatial validation (per-station holdout)
+- [x] Event-based validation (discharge/temperature tails)
+- [x] Comparison report table
+
+Model beats persistence by only 0.06 R² and loses on MAE. Under-predicts DO by
+2 mg/L at low flow — worst exactly where it matters. Hydraulic-only scores below
+the mean. Full numbers in docs/ML_METHODOLOGY.md.
 - [ ] Temporal validation (train/val/test time split)
 - [ ] Spatial validation (train on some reaches, test on others)
 - [ ] Event-based validation (normal vs extreme conditions)
