@@ -32,6 +32,8 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
 - **Real ML target added.** Observed DO, n=138. R² 0.44 grouped CV. Ayase runs ~2.4 mg/L below saturation.
 - **Phase 2b.** SHAP. temp × discharge synergistic at −1.02 mg/L. 12 collinear pairs → 2 of 4 interactions unidentifiable, reported as such.
 - **Phase 2c.** Validation + baselines. Model beats persistence by only 0.06 R². Under-predicts DO by 2 mg/L at low flow.
+- **Phase 3a.** FastAPI up. Serves both models with provenance + caveats in every response. 25 API tests.
+  - Scenario endpoint shows the low-flow flaw in action: −60% discharge *raises* predicted DO, which is physically wrong. Caveat is real, not boilerplate.
 
 ---
 
@@ -343,12 +345,12 @@ not a modelling success. HSI is a deterministic, noiseless function of the featu
 so the model recovers an analytic function rather than learning ecology. A depth-4
 tree on depth alone already reaches R² 0.66; depth+velocity reaches 0.88. Recorded
 in docs/ML_METHODOLOGY.md with the full diagnosis.
-- [ ] Model factory (XGBoost, Random Forest, LSTM)
-- [ ] Training pipeline with validation
-- [ ] Model serialization (pickle/joblib)
-- [ ] Hyperparameter tuning (optional)
+- [x] Model factory (XGBoost, Random Forest, Ridge, mean floor — no LSTM, see note)
+- [x] Training pipeline with validation
+- [x] Model serialization (pickle/joblib)
+- [ ] Hyperparameter tuning (optional — skipped, n=138 does not support it)
 - [ ] Training notebook (03_model_training.ipynb)
-- [ ] Unit tests for models
+- [x] Unit tests for models
 
 **Date Started**: _______________  
 **Date Completed**: _______________  
@@ -413,10 +415,10 @@ an urban river carrying storm load.
 SHAP ranks are not trustworthy - the hydraulic features are all derived from
 discharge. Two of four interaction pairs are *unidentifiable* (an empty corner in
 the 2x2 design). The explainer reports that rather than returning NaN.
-- [ ] SHAP explainer implemented
-- [ ] Feature importance ranking
-- [ ] Interaction analysis
-- [ ] Critical thresholds discovered
+- [x] SHAP explainer implemented
+- [x] Feature importance ranking
+- [x] Interaction analysis
+- [x] Critical thresholds discovered
 - [ ] Explainability notebook (04_explainability.ipynb)
 
 **Date Started**: _______________  
@@ -481,10 +483,10 @@ primarily driven by adequate dissolved oxygen and flow conditions."
 Model beats persistence by only 0.06 R² and loses on MAE. Under-predicts DO by
 2 mg/L at low flow — worst exactly where it matters. Hydraulic-only scores below
 the mean. Full numbers in docs/ML_METHODOLOGY.md.
-- [ ] Temporal validation (train/val/test time split)
-- [ ] Spatial validation (train on some reaches, test on others)
-- [ ] Event-based validation (normal vs extreme conditions)
-- [ ] Baseline comparisons (hydraulic-only, linear, persistence)
+- [x] Temporal validation (train/val/test time split)
+- [x] Spatial validation (train on some reaches, test on others)
+- [x] Event-based validation (normal vs extreme conditions)
+- [x] Baseline comparisons (hydraulic-only, linear, persistence)
 - [ ] Validation notebook (05_model_validation.ipynb)
 
 **Date Started**: _______________  
@@ -557,7 +559,7 @@ XGBoost vs Linear regression:
 **Status**: 🟡 In Progress
 
 ### 3a. API Design & Core Endpoints
-- [ ] FastAPI app skeleton
+- [x] FastAPI app skeleton
 - [ ] Pydantic request/response schemas
 - [ ] POST /predict endpoint
 - [ ] POST /batch_predict endpoint
