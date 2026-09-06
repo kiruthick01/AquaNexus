@@ -207,12 +207,30 @@ warm/low-DO conditions seen here, the label function is wrong.
 ---
 
 ### 1c. Data Exploration & Validation
-- [ ] Real Japanese river data loaded
-- [ ] HEC-RAS simulation completed
-- [ ] Environmental state vectors created
-- [ ] EDA notebook completed
-- [ ] Data quality report generated
-- [ ] Data saved to data/processed/
+- [x] Real Japanese river data loaded (3 fiscal years, 3,892 samples)
+- [x] HEC-RAS simulation completed (full 27.5 km reach, 3 flow profiles)
+- [x] Data quality report generated (validate_sections: 0 errors, 20 warnings)
+- [x] Data saved to data/processed/ayase_hydraulics.csv
+- [x] EDA notebook completed
+- [ ] Environmental state vectors (join hydraulics to observations) — Phase 2
+
+**Full reach result** (89 tiles, 9.5 GB, 500 m spacing):
+```
+centreline 27.5 km -> 56 candidates -> 53 sections after de-duplication
+compute succeeded for all three profiles
+  Low    (Q=0.25)  depth 0.04-5.15 m
+  Median (Q=9.7)   depth 0.23-6.05 m
+  High   (Q=64.2)  depth 1.38-7.67 m
+bed falls 10.8 m over 27.5 km = 0.39 m/km, correct sign, plausible lowland slope
+```
+
+**Quality**: 0 errors, 20 warnings. Four sections cut through constrictions or
+structures (RS 12500, 14000, 18000, 24000 - widths of 11-37 m against neighbours
+of 65-131 m); fifteen show bed steps over 2 m between adjacent sections; one is
+sparse. Median adjacent invert step is 0.53 m and 35 of 52 steps move in the
+expected direction, so the reach is coherent overall with local noise where the
+centreline (derived from tile centroids) wanders off the channel. Those sections
+should be excluded or re-cut before the geometry is used for anything load-bearing.
 
 **Date Started**: _______________  
 **Date Completed**: _______________  

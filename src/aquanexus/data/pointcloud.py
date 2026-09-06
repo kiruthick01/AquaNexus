@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import threading
 import time
 import urllib.request
 from collections.abc import Iterable, Iterator
@@ -206,16 +208,68 @@ def download_tile(tile: Tile, dest_dir: Path | None = None, overwrite: bool = Fa
         return dest
 
     log.info("downloading %s", tile.mesh)
-    tmp = dest.with_suffix(".part")
-    req = urllib.request.Request(tile.url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=600) as resp, tmp.open("wb") as fh:
-        while True:
-            chunk = resp.read(1 << 20)
-            if not chunk:
-                break
-            fh.write(chunk)
-    tmp.replace(dest)  # atomic: a partial download never looks complete
+
+    # The scratch name must be unique per writer. A shared "<mesh>.part" lets two
+    # processes downloading the same tile interleave: both write the one scratch
+    # file and both rename it, so a partial download can land as a complete-looking
+    # zip. That produced exactly one corrupt tile in an 89-tile run, and it only
+    # surfaced later as a zlib "invalid distance code" during extraction.
+    tmp = dest.with_suffix(f".{os.getpid()}.{threading.get_ident()}.part")
+    try:
+        req = urllib.request.Request(tile.url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=600) as resp, tmp.open("wb") as fh:
+            while True:
+                chunk = resp.read(1 << 20)
+                if not chunk:
+                    break
+                fh.write(chunk)
+
+        if not _is_valid_zip(tmp):
+            raise OSError(f"{tile.mesh}: downloaded archive is corrupt")
+
+        tmp.replace(dest)  # atomic: a partial download never looks complete
+    finally:
+        tmp.unlink(missing_ok=True)
     return dest
+
+
+def _is_valid_zip(path: Path) -> bool:
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(path) as zf:
+            return zf.testzip() is None
+    except Exception:  # noqa: BLE001 - any failure to read means unusable
+        return False
+
+
+def verify_tiles(river: str, dest_dir: Path | None = None,
+                 repair: bool = False) -> list[Path]:
+    """Check downloaded archives and optionally re-fetch the broken ones.
+
+    Corruption is silent until extraction, by which point a long batch job has
+    already been running for some time, so it is worth checking up front.
+    Returns the paths that were bad.
+    """
+    dest_dir = dest_dir or (settings.RAW_DIR / "pointcloud" / river)
+    if not dest_dir.is_dir():
+        return []
+
+    bad = [p for p in sorted(dest_dir.glob("*.zip")) if not _is_valid_zip(p)]
+    log.info("%s: %d archive(s) checked, %d corrupt",
+             river, len(list(dest_dir.glob("*.zip"))), len(bad))
+
+    if repair and bad:
+        index = {t.mesh: t for t in tiles_for_river(river)}
+        for path in bad:
+            tile = index.get(path.stem)
+            if tile is None:
+                log.error("no index entry for %s; cannot repair", path.name)
+                continue
+            log.info("re-downloading %s", tile.mesh)
+            path.unlink(missing_ok=True)
+            download_tile(tile, dest_dir, overwrite=True)
+    return bad
 
 
 def download_tiles(
@@ -265,9 +319,33 @@ def extract_las(zip_path: Path, dest_dir: Path | None = None) -> Path:
             raise ValueError(
                 f"expected exactly one .las in {zip_path.name}, found {members}"
             )
-        out = dest_dir / Path(members[0]).name
-        if not out.is_file():
-            zf.extract(members[0], dest_dir)
+        member = members[0]
+        expected = zf.getinfo(member).file_size
+        out = dest_dir / Path(member).name
+
+        # Existence alone is not proof of completeness: an interrupted extraction
+        # leaves a truncated file that laspy rejects much later with
+        # "buffer size must be a multiple of element size". Compare against the
+        # size recorded in the archive and redo the work if it disagrees.
+        if out.is_file() and out.stat().st_size == expected:
+            return out
+        if out.is_file():
+            log.warning("%s is %d bytes, expected %d; re-extracting",
+                        out.name, out.stat().st_size, expected)
+
+        tmp = dest_dir / f"{out.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        try:
+            with zf.open(member) as src, tmp.open("wb") as fh:
+                while True:
+                    chunk = src.read(1 << 20)
+                    if not chunk:
+                        break
+                    fh.write(chunk)
+            if tmp.stat().st_size != expected:
+                raise OSError(f"{member}: extracted {tmp.stat().st_size} of {expected} bytes")
+            tmp.replace(out)
+        finally:
+            tmp.unlink(missing_ok=True)
         return out
 
 
