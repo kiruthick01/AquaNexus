@@ -184,6 +184,65 @@ survive refutation.
 - **Held-out extremes** (tertiary) — reframed from "event-based": the extreme
   conditions within the design grid.
 
+## Phase 2a result — and why the numbers are too good
+
+The dataset (`aquanexus.data.dataset`) joins simulated hydraulics to observed
+chemistry through the discharge measured alongside each water sample: 7,314 rows,
+53 cross-sections × 138 observations, 26 features.
+
+Benchmark on a **grouped** split (whole observations held out):
+
+| model | RMSE | MAE | R² | skill vs mean |
+|---|---|---|---|---|
+| random_forest | 0.024 | 0.015 | **0.994** | 0.994 |
+| xgboost | 0.024 | 0.015 | **0.993** | 0.993 |
+| linear (Ridge) | 0.104 | 0.077 | 0.877 | 0.878 |
+| mean (floor) | 0.298 | 0.256 | −0.007 | 0.000 |
+
+**Do not read 0.99 as success.** ML_STRATEGY §9.1 expects R² 0.80–0.88 and §9.3
+expects linear regression around 0.55. Both are badly exceeded, and the reason is
+methodological, not a modelling triumph:
+
+**The labels are noiseless.** HSI is a deterministic function of the features,
+computed by code in this repository. There is no measurement error, no
+unexplained ecological variance, nothing stochastic. The model is recovering a
+smooth analytic function from its own inputs, which is close to the easiest
+possible regression problem. The plan's 0.80–0.88 target implicitly assumed data
+with real noise in it.
+
+Probing how easy, with a depth-4 decision tree on single features:
+
+```
+depth alone            R² 0.655
+velocity alone         R² 0.284
+depth + velocity       R² 0.883
+dissolved oxygen alone R² 0.067
+water temperature      R² 0.032
+```
+
+Two consequences worth stating plainly:
+
+1. **The label is dominated by hydraulics, not water quality.** Depth, velocity
+   and shear stress carry 89% of feature importance; dissolved oxygen 4%. Within
+   one observation the HSI standard deviation is 0.244, against 0.134 between
+   observation means — geometry varies more than chemistry does. That is an
+   artefact of the join: 53 sections span depths of 0.1–5.6 m at one discharge,
+   while chemistry is held constant along the reach.
+2. **The depth response is tight relative to the reach.** With an optimum of
+   1.0 m and a tolerance of 0.8 m, the deeper sections score near zero, pulling
+   the mean HSI down to 0.32 from the 0.65 the chemistry-only labels gave.
+
+**What the benchmark does establish:** the pipeline is correct end to end, the
+splits hold groups apart, the model set trains and is comparable, and the metrics
+are computed against an explicit floor. What it does **not** establish is
+ecological skill, and no amount of tuning here would change that.
+
+**Where the R² gap between splits is informative:** grouped 0.993, spatial 0.994,
+flow-extrapolation 0.973, ungrouped-random 0.998. The ungrouped split is highest,
+as expected — it straddles groups and rewards memorising near-duplicate rows. The
+flow split is lowest, which is the right ordering: extrapolating to unseen
+discharges is genuinely harder.
+
 ## Benchmarks — to re-derive
 
 The R² 0.80–0.88 in §9 was set against the hourly-series design and should not be

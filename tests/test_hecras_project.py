@@ -129,6 +129,27 @@ def test_flow_file_has_a_boundary_block_per_profile(tmp_path):
     assert "Number of Profiles= 3 " in text
 
 
+def test_flow_values_wrap_at_ten_per_line(tmp_path):
+    """Over-long flow lines desynchronise the parser rather than erroring.
+
+    HEC-RAS reads ten 8-character fields per line. An eleventh on the same line
+    is not rejected: the parser looks for it on the next line, finds the boundary
+    header, and reports a zero flow value plus a missing downstream boundary
+    condition for every profile.
+    """
+    profiles = [SteadyFlowProfile(f"Q{i}", float(i + 1)) for i in range(12)]
+    path = write_steady_flow(tmp_path / "many.f01", profiles, river="R", reach="M",
+                             upstream_station=100)
+    lines = path.read_text().splitlines()
+    start = lines.index(next(x for x in lines if x.startswith("River Rch"))) + 1
+    value_lines = lines[start:start + 2]
+    assert len(value_lines[0]) == 80
+    assert len(value_lines[1]) == 16
+    recovered = [float(v) for ln in value_lines for v in
+                 (ln[i:i+8] for i in range(0, len(ln), 8))]
+    assert recovered == [float(i + 1) for i in range(12)]
+
+
 def test_flow_values_share_one_line(tmp_path):
     path = write_steady_flow(
         tmp_path / "t.f01",

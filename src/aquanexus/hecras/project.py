@@ -99,8 +99,16 @@ def write_steady_flow(
         f"Number of Profiles= {len(profiles)} ",
         f"Profile Names={','.join(p.name for p in profiles)}",
         f"River Rch & RM={key},{upstream_station:<8.0f}",
-        "".join(f"{p.discharge:8.6g}" for p in profiles),
     ]
+
+    # Ten 8-character fields per line, the same 80-column convention the geometry
+    # uses. Writing more on one line does not raise a format error: the parser
+    # reads the first ten, then expects the rest on the next line, finds the
+    # "Boundary for River Rch" header there instead, and desynchronises. The
+    # symptoms are misleading - a zero flow value at the upstream station and
+    # "Missing Boundary Condition on downstream side" for every profile.
+    cells = [f"{p.discharge:8.6g}" for p in profiles]
+    lines += ["".join(cells[i : i + 10]) for i in range(0, len(cells), 10)]
 
     for index in range(1, len(profiles) + 1):
         lines += [

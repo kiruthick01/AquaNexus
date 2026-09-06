@@ -212,7 +212,15 @@ warm/low-DO conditions seen here, the label function is wrong.
 - [x] Data quality report generated (validate_sections: 0 errors, 20 warnings)
 - [x] Data saved to data/processed/ayase_hydraulics.csv
 - [x] EDA notebook completed
-- [ ] Environmental state vectors (join hydraulics to observations) — Phase 2
+- [→] Environmental state vectors — **deliberately moved to Phase 2**
+
+**Scope change (2026-09-06):** "Environmental state vectors" is listed under Phase 1c
+in AQUANEXUS-PLAN.md, but it is not a data-pipeline deliverable — it is the modelling
+dataset. Building it means choosing how simulated hydraulics join to monthly
+observations, which features enter the matrix, and how the design grid is sampled.
+Those are ML design decisions governed by ML_STRATEGY.md §3 and §5, so the work
+belongs with Phase 2a where those choices are made and recorded. Nothing was dropped;
+the item moved to where its decisions live.
 
 **Full reach result** (89 tiles, 9.5 GB, 500 m spacing):
 ```
@@ -289,6 +297,17 @@ Derived:       [List]
 **Status**: 🟡 In Progress
 
 ### 2a. Model Architecture & Training
+- [x] Environmental state vectors (moved from 1c) — 7,314 rows, 53 sections x 138 obs
+- [x] Flow sweep: 12 log-spaced discharges spanning the observed range
+- [x] Split strategies (grouped, spatial, flow, temporal, + leaky random for contrast)
+- [x] Model set: XGBoost, Random Forest, Ridge, mean-predictor floor
+- [x] Benchmark across all splits
+
+**Headline result**: R² 0.99 on every split — which is a finding about the labels,
+not a modelling success. HSI is a deterministic, noiseless function of the features,
+so the model recovers an analytic function rather than learning ecology. A depth-4
+tree on depth alone already reaches R² 0.66; depth+velocity reaches 0.88. Recorded
+in docs/ML_METHODOLOGY.md with the full diagnosis.
 - [ ] Model factory (XGBoost, Random Forest, LSTM)
 - [ ] Training pipeline with validation
 - [ ] Model serialization (pickle/joblib)
