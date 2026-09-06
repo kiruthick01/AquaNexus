@@ -34,6 +34,7 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
 - **Phase 2c.** Validation + baselines. Model beats persistence by only 0.06 R². Under-predicts DO by 2 mg/L at low flow.
 - **Phase 3a.** FastAPI up. Serves both models with provenance + caveats in every response. 25 API tests.
   - Scenario endpoint shows the low-flow flaw in action: −60% discharge *raises* predicted DO, which is physically wrong. Caveat is real, not boilerplate.
+- **README + repo metadata.** 7 figures generated from real project output (`scripts/make_figures.py`), 3 mermaid diagrams. GitHub description + 18 topics set. Japanese data provenance surfaced throughout.
 
 ---
 
