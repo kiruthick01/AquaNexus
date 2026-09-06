@@ -92,8 +92,8 @@ gradient is worth more to this project than a synthetic one.
 - [x] Unit tests for hecras module (45 passing)
 - [x] Docs: DATA_SOURCES.md
 - [x] Water quality loader (MOE / Saitama 検体値) + download script
-- [x] HEC-RAS runner (COM controller; geometry load verified against 7.0)
-- [ ] Steady-flow computation (geometry loads; compute still rejects input)
+- [x] HEC-RAS runner (COM controller, verified against 7.0)
+- [x] Steady-flow computation running end to end; depth and velocity extracted
 - [x] Feature engineering (preprocessor)
 - [x] Synthetic HSI label generator + falsification against real observations
 - [ ] Data validator (quality checks)
@@ -108,14 +108,27 @@ gradient is worth more to this project than a synthetic one.
 **River Selected**: 綾瀬川 Ayase, Saitama — 89 tiles, 29.4 km, fully contiguous  
 **Data Source**: 埼玉県 河川点群データ (CC BY 4.0), UAV + narrow multibeam  
 
-**Sample Output** (cross-sections from tile ayasegawa-0610, 100 m spacing):
+**Sample Output** — full pipeline, point cloud to hydraulics, tile ayasegawa-0610.
+Discharges are the q01 / median / q99 of the observed Ayase record:
 ```
-RS  15400.0  invert   5.17 m  width  126 m  (7,482 pts)
-RS  15500.0  invert   5.22 m  width   98 m  (6,165 pts)
-RS  15600.0  invert   5.34 m  width   66 m  (4,333 pts)
+profile 2: Median  Q=9.7 m3/s
+   RS   invert      WSE    depth      vel    area   width
+  300     5.51     6.78     1.27   0.530    18.3    17.7
+  250     5.37     6.76     1.39   0.502    19.3    17.6
+  200     5.27     6.38     1.11   2.458     3.9     7.7
+  150     5.19     6.43     1.24   0.767    12.7    13.6
+  100     5.17     6.37     1.20   0.767    12.6    14.6
+   50     5.26     6.32     1.06   0.726    13.4    15.2
 ```
-Invert rises with river station, i.e. bed rises upstream — the expected sign.
-Standalone extraction on the same tile gave 5.19 m, so the two paths agree.
+At the high profile (64.2 m3/s) top width jumps from ~33 m to ~94 m at RS 200-150:
+water spreading onto the flat terrace beside the channel. That resolves an open
+question from the ingest work - the flat feature at ~7.35 m is a real flood terrace
+(高水敷), not an unpenetrated water surface, since it conveys flow.
+
+**Known data-quality issue**: RS 200 extracts anomalously narrow (1.9 m at low flow
+against 10-13 m either side) and shows velocity 2.46 m/s where neighbours are ~0.5.
+The section is being cut through a constriction or a structure. The data validator
+should flag sections whose width departs sharply from their neighbours.
 
 **Issues Encountered**:
 - [x] **No ground classification.** Every point in the published tiles is class 1,
@@ -150,6 +163,23 @@ Standalone extraction on the same tile gave 5.19 m, so the two paths agree.
       .u01 on disk raises a modal dialog; over COM the call blocks forever with no error
       and leaves orphaned Ras.exe processes. `validate_project()` now checks for this
       before opening anything, and RasController kills surviving processes on exit.
+- [x] **Bank stations must be values that exist in the station/elevation list.**
+      The obvious "35% of the way across" rule produces an interpolated station, and
+      extraction drops sparse bins so the list has gaps. HEC-RAS rejected every section
+      with "Left bank station not in station elevation data" and refused the run.
+      Banks are now found by walking outward from the thalweg, which returns real
+      stations by construction. Manning break points had the same defect.
+- [x] **A hand-written plan file cannot work.** HEC-RAS 7.0's own plan carries ~200
+      settings; a minimal one is rejected with only "there must have been some missing
+      data in the input files", naming neither file nor field. The plan and project are
+      now templates captured from a reference project HEC-RAS wrote and computed itself.
+- [x] **Double CRLF from Python's text layer.** Writing an already-CRLF string without
+      `newline=""` emits 
+. HEC-RAS accepts the file, then hangs on a modal
+      dialog rather than reporting a parse error.
+- [x] **The detailed diagnosis is written to `<plan>.computeMsgs.txt`.** The COM
+      controller returns only the generic summary; the per-station reasons are on disk.
+      Four blind attempts were spent before finding that file.
 - [x] **Windows console mangled Japanese log output** (綾瀬川 printed as escapes).
       Logger now reconfigures the stream to UTF-8, guarded for detached streams.
 

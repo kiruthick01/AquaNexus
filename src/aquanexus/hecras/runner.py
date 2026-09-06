@@ -51,6 +51,30 @@ _SIDECAR_KEYS = {
 }
 
 
+#: Output variable ids for ``Output_NodeOutput``. HEC-RAS does not document
+#: these in the controller API, so they were identified empirically by matching
+#: returned values against known quantities - velocity, for instance, is the id
+#: whose value equals discharge divided by flow area.
+class Output:
+    WSE = 2               # water surface elevation, m
+    ENERGY_GRADE = 3      # energy grade elevation, m
+    MAX_DEPTH = 4         # maximum channel depth, m
+    INVERT = 5            # minimum channel elevation, m
+    Q_TOTAL = 7           # total discharge, m3/s
+    Q_CHANNEL = 9         # channel discharge, m3/s
+    FLOW_AREA = 10        # total flow area, m2
+    AREA_CHANNEL = 12     # channel flow area, m2
+    TOP_WIDTH = 14        # top width, m
+    VELOCITY = 23         # channel velocity, m/s
+    VELOCITY_CHANNEL = 25
+    WETTED_PERIMETER = 29
+    ENERGY_SLOPE = 30     # friction slope, m/m
+
+
+#: HEC-RAS returns this sentinel (max single-precision float) for "no value".
+_NO_DATA = 3.0e38
+
+
 class HecRasError(RuntimeError):
     """HEC-RAS could not be driven to completion."""
 
@@ -188,12 +212,44 @@ class RasController:
 
     def node_output(self, node: int, variable: int, river: int = 1, reach: int = 1,
                     profile: int = 1) -> float:
-        """Read one output variable at one node.
+        """Read one output variable at one node. See :class:`Output` for ids.
 
-        Common variable ids: 2 = water surface elevation, 4 = depth,
-        6 = channel velocity.
+        The COM call returns ``(value, *echoed arguments)`` rather than a bare
+        number, and signals "not available" with a sentinel near the maximum
+        single-precision float rather than an error - returned here as NaN so it
+        cannot be mistaken for a real reading.
         """
-        return float(self._ras.Output_NodeOutput(river, reach, node, 0, profile, variable))
+        result = self._ras.Output_NodeOutput(river, reach, node, 0, profile, variable)
+        value = result[0] if isinstance(result, tuple) else result
+        if value is None:
+            return float("nan")
+        value = float(value)
+        return float("nan") if abs(value) >= _NO_DATA else value
+
+    def profile_results(self, profile: int = 1, river: int = 1, reach: int = 1,
+                        variables: dict[str, int] | None = None):
+        """Read a table of results for every cross-section in a reach.
+
+        Returns a list of dicts keyed by river station, one row per section.
+        """
+        variables = variables or {
+            "wse": Output.WSE,
+            "invert": Output.INVERT,
+            "depth": Output.MAX_DEPTH,
+            "velocity": Output.VELOCITY,
+            "discharge": Output.Q_TOTAL,
+            "flow_area": Output.FLOW_AREA,
+            "top_width": Output.TOP_WIDTH,
+            "energy_slope": Output.ENERGY_SLOPE,
+        }
+        stations = self.nodes(river, reach)
+        rows = []
+        for index, station in enumerate(stations, start=1):
+            row = {"river_station": float(station) if station else float("nan")}
+            for name, var in variables.items():
+                row[name] = self.node_output(index, var, river, reach, profile)
+            rows.append(row)
+        return rows
 
 
 def find_hecras_exe() -> Path | None:

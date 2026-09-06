@@ -67,6 +67,9 @@ Repository = "https://github.com/kiruthick01/aquanexus"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"aquanexus.hecras" = ["templates/*.tmpl"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

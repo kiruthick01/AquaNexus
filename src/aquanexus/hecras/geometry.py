@@ -248,6 +248,49 @@ def extract_sections(
 # ---------------------------------------------------------------------------
 
 
+def bank_stations(xs: CrossSection, height_fraction: float = 0.5) -> tuple[float, float]:
+    """Locate the main-channel bank stations for a section.
+
+    Walks outward from the thalweg while the bed stays below
+    ``invert + height_fraction * (top - invert)``, and returns the station values
+    at which it stops.
+
+    Returning **actual station values** is a hard HEC-RAS requirement, not a
+    nicety. Interpolated banks - the obvious "35% of the way across" rule - are
+    rejected with::
+
+        - Left bank station not in station elevation data.
+        - Right bank station not in station elevation data.
+
+    and the run is refused. Extraction drops sparse bins, so the station list has
+    gaps and an arithmetic guess frequently lands in one.
+    """
+    if xs.is_empty:
+        return 0.0, 0.0
+    if len(xs.station) < 3:
+        return float(xs.station[0]), float(xs.station[-1])
+
+    elevation = xs.elevation
+    invert_index = int(np.argmin(elevation))
+    invert = float(elevation[invert_index])
+    top = float(elevation.max())
+    threshold = invert + height_fraction * (top - invert)
+
+    left = invert_index
+    while left > 0 and elevation[left - 1] <= threshold:
+        left -= 1
+    right = invert_index
+    while right < len(elevation) - 1 and elevation[right + 1] <= threshold:
+        right += 1
+
+    # A flat or noisy profile can collapse both walks onto the thalweg; fall back
+    # to the section ends so the banks still bracket a channel.
+    if left == right:
+        left, right = 0, len(elevation) - 1
+
+    return float(xs.station[left]), float(xs.station[right])
+
+
 def to_hecras_geometry(
     sections: list[CrossSection],
     title: str = "AquaNexus",
@@ -256,7 +299,9 @@ def to_hecras_geometry(
     version: str = "7.00",
     manning_channel: float = 0.035,
     manning_overbank: float = 0.06,
-    bank_fraction: float = 0.35,
+    bank_fraction: float = 0.5,
+    edited_time: str = "Jan-01-2026 00:00:00",
+    gis_cut_lines: bool = False,
 ) -> str:
     """Serialise sections to HEC-RAS .g01 geometry format.
 
@@ -322,16 +367,24 @@ def to_hecras_geometry(
             f"Type RM Length L Ch R = 1 ,{xs.river_station:<8.0f},{nxt:.0f},{nxt:.0f},{nxt:.0f}"
         )
 
-        # Cut line normal to flow through the section origin.
-        ox, oy = xs.origin
-        dx, dy = xs.direction
-        nx, ny = -dy, dx
-        half = xs.width / 2.0 if xs.width else 1.0
-        lines.append("XS GIS Cut Line=2")
-        lines.append(
-            f16(ox - nx * half) + f16(oy - ny * half)
-            + f16(ox + nx * half) + f16(oy + ny * half)
-        )
+        # Present in files HEC-RAS writes itself; absent, the section is
+        # treated as incomplete.
+        lines.append(f"Node Last Edited Time={edited_time}")
+
+        # Georeferenced cut lines are optional and off by default: a working
+        # reference project written by HEC-RAS 7.0 omits them entirely, so they
+        # are one more thing to get wrong before the model will run. Enable once
+        # the geometry is needed in RAS Mapper.
+        if gis_cut_lines:
+            ox, oy = xs.origin
+            dx, dy = xs.direction
+            nx, ny = -dy, dx
+            half = xs.width / 2.0 if xs.width else 1.0
+            lines.append("XS GIS Cut Line=2")
+            lines.append(
+                f16(ox - nx * half) + f16(oy - ny * half)
+                + f16(ox + nx * half) + f16(oy + ny * half)
+            )
 
         n = len(xs.station)
         lines.append(f"#Sta/Elev= {n} ")
@@ -339,19 +392,42 @@ def to_hecras_geometry(
         for k in range(0, len(cells), 5):
             lines.append("".join(cells[k : k + 5]))
 
-        lo, hi = float(xs.station.min()), float(xs.station.max())
-        span = hi - lo
-        left_bank = lo + span * bank_fraction
-        right_bank = hi - span * bank_fraction
-        lines.append("#Mann= 3 , 0 , 0 ")
+        left_bank, right_bank = bank_stations(xs, bank_fraction)
+        lines.append("#Mann= 3 ,0,0")
         lines.append(
-            f8(lo) + f8(manning_overbank) + f8(0)
+            f8(float(xs.station.min())) + f8(manning_overbank) + f8(0)
             + f8(left_bank) + f8(manning_channel) + f8(0)
             + f8(right_bank) + f8(manning_overbank) + f8(0)
         )
         lines.append(f"Bank Sta={left_bank:.2f},{right_bank:.2f}")
         lines.append("XS Rating Curve= 0 ,0")
+
+        # Hydraulic-table bounds. Unused by a steady run (the plan sets
+        # Run HTab= 0), but HEC-RAS writes them for every section and treats
+        # geometry that omits them as incomplete.
+        invert = xs.thalweg
+        top = float(xs.elevation.max())
+        increment = max((top - invert) / 20.0, 0.01)
+        lines.append(
+            f"XS HTab Starting El and Incr={invert + 0.15:.2f},{increment:.2f}, 20 "
+        )
+        lines.append("XS HTab Horizontal Distribution= 5 , 5 , 5 ")
         lines.append("Exp/Cntr=0.3,0.1")
         lines.append("")
+
+    # File trailer. Every one of these appears in geometry HEC-RAS writes itself.
+    lines += [
+        "LCMann Time=Dec-30-1899 00:00:00",
+        "LCMann Region Time=Dec-30-1899 00:00:00",
+        "LCMann Table=0",
+        "Chan Stop Cuts=-1 ",
+        "",
+        "",
+        "",
+        "Use User Specified Reach Order=0",
+        "GIS Ratio Cuts To Invert=-1",
+        "GIS Limit At Bridges=0",
+        "Composite Channel Slope=5",
+    ]
 
     return "\n".join(lines) + "\n"

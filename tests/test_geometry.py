@@ -289,9 +289,41 @@ def test_each_section_carries_the_required_blocks():
     text = _sample_geometry()
     n = text.count("#Sta/Elev=")
     assert n > 0
-    for marker in ("XS GIS Cut Line=", "#Mann=", "Bank Sta=",
-                   "XS Rating Curve=", "Exp/Cntr="):
+    for marker in ("Node Last Edited Time=", "#Mann=", "Bank Sta=",
+                   "XS Rating Curve=", "XS HTab Starting El and Incr=",
+                   "XS HTab Horizontal Distribution=", "Exp/Cntr="):
         assert text.count(marker) == n, marker
+
+
+def test_gis_cut_lines_are_opt_in():
+    """A working reference project written by HEC-RAS 7.0 omits them entirely."""
+    pts = synthetic_channel(length=600.0)
+    line = np.column_stack((np.arange(0, 601, 100.0), np.zeros(7)))
+    secs = extract_sections(pts, line, spacing=200.0)
+    assert "XS GIS Cut Line=" not in to_hecras_geometry(secs)
+    with_cuts = to_hecras_geometry(secs, gis_cut_lines=True)
+    assert with_cuts.count("XS GIS Cut Line=") == len(secs)
+
+
+def test_file_trailer_present():
+    text = _sample_geometry()
+    for marker in ("LCMann Time=", "LCMann Region Time=", "LCMann Table=",
+                   "Chan Stop Cuts=", "Use User Specified Reach Order=",
+                   "GIS Ratio Cuts To Invert=", "GIS Limit At Bridges=",
+                   "Composite Channel Slope="):
+        assert marker in text, marker
+
+
+def test_htab_starting_elevation_sits_just_above_the_invert():
+    pts = synthetic_channel(length=400.0)
+    line = np.column_stack((np.arange(0, 401, 100.0), np.zeros(5)))
+    secs = extract_sections(pts, line, spacing=200.0)
+    text = to_hecras_geometry(secs)
+    starts = [float(ln.split("=")[1].split(",")[0])
+              for ln in text.splitlines() if ln.startswith("XS HTab Starting")]
+    inverts = sorted((s.thalweg for s in secs), reverse=True)
+    for start, invert in zip(starts, inverts, strict=True):
+        assert invert < start < invert + 0.5
 
 
 def test_bank_stations_lie_inside_the_section():
