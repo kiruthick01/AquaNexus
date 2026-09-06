@@ -218,6 +218,42 @@ def download_tile(tile: Tile, dest_dir: Path | None = None, overwrite: bool = Fa
     return dest
 
 
+def download_tiles(
+    tiles: list[Tile],
+    dest_dir: Path | None = None,
+    workers: int = 6,
+    overwrite: bool = False,
+) -> list[Path]:
+    """Download many tiles concurrently.
+
+    Throughput on a single connection is limited by the server rather than the
+    link - sequentially the full Ayase reach takes hours - so a small pool of
+    workers cuts wall-clock time substantially. Kept modest to stay a polite
+    client of a free public dataset.
+
+    Failures are logged and skipped rather than aborting the batch; rerun to
+    pick up what is missing, since completed files are skipped.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    paths: list[Path] = []
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(download_tile, tile, dest_dir, overwrite): tile
+            for tile in tiles
+        }
+        for done, future in enumerate(as_completed(futures), start=1):
+            tile = futures[future]
+            try:
+                paths.append(future.result())
+                log.info("[%d/%d] %s", done, len(tiles), tile.mesh)
+            except Exception as exc:  # noqa: BLE001 - one bad tile must not stop the run
+                log.error("[%d/%d] %s failed: %s", done, len(tiles), tile.mesh, exc)
+
+    log.info("downloaded %d of %d tile(s)", len(paths), len(tiles))
+    return paths
+
+
 def extract_las(zip_path: Path, dest_dir: Path | None = None) -> Path:
     """Extract the single .las member from a tile zip."""
     import zipfile

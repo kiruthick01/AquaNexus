@@ -96,10 +96,10 @@ gradient is worth more to this project than a synthetic one.
 - [x] Steady-flow computation running end to end; depth and velocity extracted
 - [x] Feature engineering (preprocessor)
 - [x] Synthetic HSI label generator + falsification against real observations
-- [ ] Data validator (quality checks)
-- [ ] Notebook: 01_hecras_workflow.ipynb
-- [ ] Notebook: 02_data_exploration.ipynb
-- [ ] Docs: HECRAS_GUIDE.md
+- [x] Data validator (quality checks)
+- [x] Notebook: 01_hecras_workflow.ipynb
+- [x] Notebook: 02_data_exploration.ipynb
+- [x] Docs: HECRAS_GUIDE.md
 
 **Date Started**: 2026-09-06  
 **Date Completed**: in progress  
@@ -174,7 +174,9 @@ should flag sections whose width departs sharply from their neighbours.
       data in the input files", naming neither file nor field. The plan and project are
       now templates captured from a reference project HEC-RAS wrote and computed itself.
 - [x] **Double CRLF from Python's text layer.** Writing an already-CRLF string without
-      `newline=""` emits 
+      `newline=""` emits 
+
+
 . HEC-RAS accepts the file, then hangs on a modal
       dialog rather than reporting a parse error.
 - [x] **The detailed diagnosis is written to `<plan>.computeMsgs.txt`.** The COM
