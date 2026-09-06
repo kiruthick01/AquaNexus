@@ -36,6 +36,32 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
   - Scenario endpoint shows the low-flow flaw in action: −60% discharge *raises* predicted DO, which is physically wrong. Caveat is real, not boilerplate.
 - **README + repo metadata.** 7 figures generated from real project output (`scripts/make_figures.py`), 3 mermaid diagrams. GitHub description + 18 topics set. Japanese data provenance surfaced throughout.
 
+
+### Next session — pick up here
+
+**State:** Phases 1, 2, 3a done. 313 tests, lint clean, all pushed.
+
+**Next, in order of value:**
+1. `03_model_training.ipynb` + `04_explainability.ipynb` + `05_model_validation.ipynb` — Phase 2 debt. The honest-vs-synthetic comparison in a form a professor can read.
+2. Phase 3b — Docker verify (never tested, no Docker on this machine), integration tests.
+3. Phase 4 — React frontend.
+
+**Known debt:**
+- 4 cross-sections cut through constrictions (RS 12500/14000/18000/24000) — flagged by validator, not excluded.
+- Scenario endpoint unreliable at low flow (−60% discharge *raises* predicted DO; physically backwards).
+- Manning's n uncalibrated.
+
+**To rebuild anything:**
+```
+python scripts/download_data.py                     # water quality
+python scripts/build_geometry.py --river ayasegawa  # tiles -> HEC-RAS -> run
+python scripts/train_models.py                      # both models + manifest
+python scripts/make_figures.py                      # README figures
+uvicorn aquanexus.api.app:app --reload
+```
+Raw data (9.5 GB tiles) is gitignored but already on disk at `data/raw/`.
+
+
 ---
 
 ## Project Overview
