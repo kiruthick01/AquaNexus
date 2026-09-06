@@ -44,6 +44,11 @@ class ModelConfig:
     reg_alpha: float = 0.1
     reg_lambda: float = 1.0
     early_stopping_rounds: int | None = 20
+    #: Range predictions are clipped to. ``(0.0, 1.0)`` suits the habitat index,
+    #: which is bounded by definition. It is **wrong for a physical quantity**:
+    #: clipping dissolved oxygen to [0, 1] turns 6 mg/L into 1. Pass ``None`` to
+    #: leave predictions untouched, or a physical range where one applies.
+    output_range: tuple[float, float] | None = (0.0, 1.0)
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -170,14 +175,20 @@ class HabitatPredictor:
     # -- inference ----------------------------------------------------------
 
     def predict(self, X: pd.DataFrame) -> np.ndarray:  # noqa: N803
-        """Predict HSI, clipped to [0, 1].
+        """Predict, clipped to ``config.output_range`` when one is set.
 
-        Clipping is not cosmetic: HSI is a bounded index, and a regressor will
-        happily return 1.03 near the top of its range. An out-of-range
-        suitability score is meaningless to anyone reading it.
+        Clipping is not cosmetic for a bounded index: HSI lives in [0, 1] and a
+        regressor will happily return 1.03 near the top of its range, which is
+        meaningless to anyone reading it. It is equally important that the range
+        be *correct* - the default suits HSI, and applying it to a concentration
+        in mg/L silently turns every reading above 1 into 1.
         """
         self._require_fitted()
-        return np.clip(self.model.predict(X[self.feature_names]), 0.0, 1.0)
+        predictions = self.model.predict(X[self.feature_names])
+        if self.config.output_range is None:
+            return np.asarray(predictions, dtype=float)
+        low, high = self.config.output_range
+        return np.clip(predictions, low, high)
 
     def predict_with_uncertainty(self, X: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:  # noqa: N803
         """Predictions and a per-row spread.

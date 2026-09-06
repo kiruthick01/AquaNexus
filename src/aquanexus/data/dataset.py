@@ -171,6 +171,10 @@ def feature_columns(dataset: pd.DataFrame, exclude: set[str] | None = None) -> l
 #: other measured chemistry: BOD and nutrients are sampled from the same bottle,
 #: so including them predicts one measurement from another rather than from the
 #: river's physical state, and the hydraulics would stop mattering.
+#: Physically possible range for dissolved oxygen in fresh water, used to clip
+#: model output. Supersaturation to ~17 mg/L is real in this record.
+DO_RANGE = (0.0, 25.0)
+
 DO_FEATURES = (
     "water_temp", "air_temp", "discharge", "month_sin", "month_cos",
     "reach_depth", "reach_velocity", "reach_top_width", "reach_froude",

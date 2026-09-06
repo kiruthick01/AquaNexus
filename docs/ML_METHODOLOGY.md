@@ -306,6 +306,76 @@ not — which is the project's central claim, demonstrated on real labels. It is
 small effect and should be reported as one; hydraulics alone predict nothing
 (R² −0.26), because DO is thermally driven first.
 
+## Phase 2b — explainability (ML_STRATEGY §7.2)
+
+Implemented in `aquanexus.ml.explainer`. Two deviations from the spec, both forced:
+
+**§7.2 Step 2 specifies `TreeExplainer`** because it assumes XGBoost is the chosen
+model. On the DO target Ridge cross-validates better, and `TreeExplainer` cannot
+explain a Ridge pipeline. The explainer dispatches on model type instead.
+
+**§7.2 Steps 2–3 specify 8,760 background and test records.** The real datasets are
+138 rows (DO) and 7,314 (HSI). Background comes from the training partition,
+k-means summarised when large.
+
+### Step 6: interaction analysis — and what it cannot answer
+
+Of the pairs tested, **only one is identifiable**:
+
+| pair | correlation | result |
+|---|---|---|
+| water_temp × discharge | +0.24 | **interaction −1.02 mg/L — synergistic** |
+| water_temp × do_saturation | −0.99 | not identifiable (empty cells) |
+| discharge × reach_velocity | +0.97 | not identifiable (empty cells) |
+
+Warm water combined with high discharge depresses dissolved oxygen by **1.0 mg/L
+more than the two effects added separately**. That is ecologically coherent for an
+urban lowland river: high flow carries storm and combined-sewer load, and warm
+water both holds less oxygen and accelerates microbial respiration.
+
+The other pairs cannot be answered from this data at all. When two features
+correlate at 0.97+, one corner of the two-by-two design is empty — "high discharge,
+low velocity" never occurs — so the interaction is unidentifiable. The explainer
+now returns `identifiable: False` with the reason rather than a bare NaN, because
+a NaN there reads as "no interaction" when the truth is "cannot tell".
+
+### Collinearity: why individual SHAP ranks here are not trustworthy
+
+**Twelve feature pairs correlate at |r| ≥ 0.9.** The hydraulic features are all
+derived from discharge through the same model, so depth, velocity, top width and
+Froude number are near-duplicates of one another; water temperature and DO
+saturation are deterministically related at r = −0.99.
+
+SHAP still sums correctly to each prediction, but **how it divides that total
+between collinear features is arbitrary**. The consequence is visible in the
+threshold sweep: `water_temp` shows a marginal response span of only 0.32 mg/L and
+is flagged not influential, while `do_saturation` — a deterministic function of
+water temperature — spans 5.42 mg/L. The model routes the temperature signal
+through one of the pair, and reading either in isolation understates it.
+
+`HabitatExplainer.collinearity()` lists these pairs, and `feature_importance()`
+documents the caveat. Individual hydraulic feature ranks should be read as one
+combined contribution, not a league table.
+
+### Step 5: threshold discovery
+
+Marginal response with all other features at their median, ranked by how far the
+prediction moves across each feature's observed range:
+
+| feature | response span (mg/L) | steepest at | influential |
+|---|---|---|---|
+| do_saturation | 5.42 | 12.08 mg/L | yes |
+| reach_top_width | 3.62 | 48.9 m | yes |
+| air_temp | 2.33 | 35.2 °C | yes |
+| reach_froude | 1.90 | 0.03 | yes |
+| reach_depth | 1.70 | 3.41 m | yes |
+| discharge | 1.53 | 16.6 m³/s | yes |
+| water_temp | 0.32 | 32.4 °C | **no** — see collinearity above |
+
+These are partial-dependence curves: they describe what the model does, not what
+the river does. Holding correlated features at their median produces combinations
+that may never occur.
+
 ## Benchmarks — to re-derive
 
 The R² 0.80–0.88 in §9 was set against the hourly-series design and should not be

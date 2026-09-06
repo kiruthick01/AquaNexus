@@ -371,6 +371,21 @@ Nash-Sutcliffe Efficiency (NSE): ________
 ---
 
 ### 2b. Explainability & Threshold Detection
+- [x] SHAP explainer with model-type dispatch (Tree/Kernel)
+- [x] Feature importance by mean |SHAP|, signed and absolute
+- [x] Interaction analysis with identifiability reporting
+- [x] Threshold discovery (marginal response sweeps)
+- [x] Summary plot + saved SHAP values
+- [x] Collinearity detection
+
+**Key result**: water_temp x discharge interact synergistically at -1.02 mg/L -
+warm water plus high flow depresses oxygen more than the parts added. Coherent for
+an urban river carrying storm load.
+
+**Key limitation found**: 12 feature pairs correlate at |r| >= 0.9, so individual
+SHAP ranks are not trustworthy - the hydraulic features are all derived from
+discharge. Two of four interaction pairs are *unidentifiable* (an empty corner in
+the 2x2 design). The explainer reports that rather than returning NaN.
 - [ ] SHAP explainer implemented
 - [ ] Feature importance ranking
 - [ ] Interaction analysis
