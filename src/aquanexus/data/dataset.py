@@ -161,3 +161,82 @@ def feature_columns(dataset: pd.DataFrame, exclude: set[str] | None = None) -> l
 
     numeric = dataset.select_dtypes(include=[np.number])
     return [c for c in numeric.columns if c not in never and not c.endswith("_flag")]
+
+
+# ---------------------------------------------------------------------------
+# Observed water quality target
+# ---------------------------------------------------------------------------
+
+#: Physical and seasonal drivers of dissolved oxygen. Deliberately excludes the
+#: other measured chemistry: BOD and nutrients are sampled from the same bottle,
+#: so including them predicts one measurement from another rather than from the
+#: river's physical state, and the hydraulics would stop mattering.
+DO_FEATURES = (
+    "water_temp", "air_temp", "discharge", "month_sin", "month_cos",
+    "reach_depth", "reach_velocity", "reach_top_width", "reach_froude",
+    "do_saturation",
+)
+
+
+def build_water_quality_dataset(
+    observations: pd.DataFrame,
+    sweep: pd.DataFrame,
+    target: str = "dissolved_oxygen",
+) -> pd.DataFrame:
+    """Assemble a dataset for predicting an observed water quality variable.
+
+    Unlike :func:`build_state_vectors`, this produces **one row per observation**
+    - the real measurement is the label, so there is nothing to broadcast across
+    cross-sections. Reach-averaged hydraulics at the observed discharge enter as
+    features, which is how the hydraulic model contributes: dissolved oxygen is
+    governed partly by reaeration, and reaeration is a function of depth and
+    velocity.
+
+    Station is kept as a column for grouping, not as a feature. With five
+    stations and ~140 rows, a station identifier is close to a row identifier and
+    a tree will use it to memorise.
+    """
+    usable = observations.dropna(subset=["discharge", target]).copy()
+    if usable.empty:
+        raise ValueError(f"no observations carry both discharge and {target}")
+
+    rows = []
+    for _, observation in usable.iterrows():
+        discharge = float(observation["discharge"])
+        hydraulics = interpolate_hydraulics(sweep, discharge)
+
+        row = {
+            "discharge": discharge,
+            target: float(observation[target]),
+            "reach_depth": float(hydraulics["depth"].mean()),
+            "reach_velocity": float(hydraulics["velocity"].mean()),
+            "reach_top_width": float(hydraulics["top_width"].mean()),
+        }
+        # Froude from reach means, guarding the shallow-water divide.
+        depth = row["reach_depth"]
+        row["reach_froude"] = (
+            row["reach_velocity"] / np.sqrt(9.80665 * depth) if depth > 0 else np.nan
+        )
+
+        for column in ("water_temp", "air_temp", "station", "water_body", "timestamp"):
+            if column in usable.columns:
+                row[column] = observation[column]
+        rows.append(row)
+
+    dataset = pd.DataFrame(rows)
+
+    # Season as a pair of cyclic terms, so December sits next to January rather
+    # than eleven months away.
+    month = pd.to_datetime(dataset["timestamp"]).dt.month
+    dataset["month"] = month
+    dataset["month_sin"] = np.sin(2 * np.pi * month / 12.0)
+    dataset["month_cos"] = np.cos(2 * np.pi * month / 12.0)
+
+    from aquanexus.data.preprocessor import do_saturation
+
+    dataset["do_saturation"] = do_saturation(dataset["water_temp"])
+
+    log.info("water quality dataset: %d observation(s), target %s, %d station(s)",
+             len(dataset), target, dataset["station"].nunique()
+             if "station" in dataset else 0)
+    return dataset

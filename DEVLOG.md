@@ -303,7 +303,15 @@ Derived:       [List]
 - [x] Model set: XGBoost, Random Forest, Ridge, mean-predictor floor
 - [x] Benchmark across all splits
 
-**Headline result**: R² 0.99 on every split — which is a finding about the labels,
+**Second target added — observed dissolved oxygen (real labels).** R² 0.442,
+RMSE 1.71 mg/L under grouped CV with each station held out. Ridge beats both tree
+models at n=138. The DO-saturation baseline scores R² −0.60 with bias +2.39 mg/L,
+i.e. the Ayase runs a persistent ~2.4 mg/L oxygen deficit — a real measured
+property. Ablation: raw discharge *hurts* (−0.019 R²) while the hydraulic model's
+transformation of it helps (+0.062), so the physics-informed step carries
+information the raw driver does not.
+
+**Synthetic HSI result**: R² 0.99 on every split — which is a finding about the labels,
 not a modelling success. HSI is a deterministic, noiseless function of the features,
 so the model recovers an analytic function rather than learning ecology. A depth-4
 tree on depth alone already reaches R² 0.66; depth+velocity reaches 0.88. Recorded

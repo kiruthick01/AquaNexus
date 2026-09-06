@@ -322,3 +322,59 @@ def test_residual_summary_exposes_extremes():
     summary = residual_summary(y, pred)
     assert summary.iloc[0]["bias"] > 0    # over-predicts the low tail
     assert summary.iloc[-1]["bias"] < 0   # under-predicts the high tail
+
+
+# ---------------------------------------------------------------------------
+# Observed water quality target
+# ---------------------------------------------------------------------------
+
+
+def test_water_quality_dataset_is_one_row_per_observation(observations, sweep):
+    from aquanexus.data.dataset import build_water_quality_dataset
+
+    observations["dissolved_oxygen"] = np.linspace(4, 11, len(observations))
+    built = build_water_quality_dataset(observations, sweep)
+    assert len(built) == len(observations)
+
+
+def test_water_quality_dataset_carries_reach_hydraulics(observations, sweep):
+    from aquanexus.data.dataset import build_water_quality_dataset
+
+    observations["dissolved_oxygen"] = np.linspace(4, 11, len(observations))
+    built = build_water_quality_dataset(observations, sweep)
+    for column in ("reach_depth", "reach_velocity", "reach_top_width", "reach_froude"):
+        assert column in built.columns
+        assert built[column].notna().all()
+    # Deeper water at higher discharge.
+    ordered = built.sort_values("discharge")
+    assert ordered["reach_depth"].iloc[0] < ordered["reach_depth"].iloc[-1]
+
+
+def test_season_is_encoded_cyclically(observations, sweep):
+    """December must sit next to January, not eleven months away."""
+    from aquanexus.data.dataset import build_water_quality_dataset
+
+    observations["dissolved_oxygen"] = np.linspace(4, 11, len(observations))
+    built = build_water_quality_dataset(observations, sweep)
+    assert np.allclose(built["month_sin"] ** 2 + built["month_cos"] ** 2, 1.0)
+
+
+def test_water_quality_dataset_requires_target_and_discharge(observations, sweep):
+    from aquanexus.data.dataset import build_water_quality_dataset
+
+    observations["dissolved_oxygen"] = np.nan
+    with pytest.raises(ValueError, match="discharge and dissolved_oxygen"):
+        build_water_quality_dataset(observations, sweep)
+
+
+def test_do_feature_set_excludes_co_sampled_chemistry():
+    """BOD and nutrients come from the same bottle as the target.
+
+    Including them predicts one measurement from another rather than from the
+    river's physical state, and the hydraulics stop mattering.
+    """
+    from aquanexus.data.dataset import DO_FEATURES
+
+    for chemistry in ("bod", "cod", "nitrogen_total", "phosphorus_total",
+                      "suspended_solids", "ph"):
+        assert chemistry not in DO_FEATURES

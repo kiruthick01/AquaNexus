@@ -243,6 +243,69 @@ as expected — it straddles groups and rewards memorising near-duplicate rows. 
 flow split is lowest, which is the right ordering: extrapolating to unseen
 discharges is genuinely harder.
 
+## The real ML target: observed dissolved oxygen
+
+The synthetic-HSI benchmark above measures function recovery. This one does not:
+the label is **measured dissolved oxygen** from the monitoring record — a real
+number with real instrument and sampling error.
+
+`build_water_quality_dataset()` produces one row per observation (n=138 on the
+Ayase, 4 stations with both discharge and DO). Reach-averaged hydraulics at the
+observed discharge enter as features, which is how the hydraulic model earns its
+place: DO is governed partly by reaeration, and reaeration depends on depth and
+velocity.
+
+BOD, nutrients and suspended solids are **deliberately excluded**. They come from
+the same bottle as the target, so including them predicts one measurement from
+another rather than from the river's physical state, and the hydraulics would
+stop mattering.
+
+### Result — grouped cross-validation, each station held out
+
+| model | RMSE (mg/L) | MAE | R² | skill |
+|---|---|---|---|---|
+| **Ridge (linear)** | **1.713** | 1.232 | **0.442** | 0.442 |
+| random forest | 1.879 | 1.417 | 0.329 | 0.329 |
+| xgboost | 1.904 | 1.409 | 0.311 | 0.311 |
+| DO saturation (physics) | 2.900 | 2.577 | −0.598 | −0.598 |
+| mean (floor) | 2.294 | 1.779 | 0.000 | 0.000 |
+
+Three things worth stating:
+
+**Linear beats both tree models.** With 138 rows and 10 features, gradient
+boosting overfits and cross-validates worse than a regularised linear fit. The
+plan assumes throughout that XGBoost wins; on this dataset it does not, and
+reporting it the other way round would be dishonest.
+
+**The saturation baseline fails informatively.** Predicting DO as saturation at
+the observed temperature scores R² −0.60 — worse than the mean — yet correlates
+at Pearson 0.697. It has the right *shape* and the wrong *level*: bias +2.39 mg/L.
+**The Ayase runs a persistent oxygen deficit of roughly 2.4 mg/L below
+saturation.** That is a real, measured property of this river, and it is exactly
+what a habitat model should care about.
+
+### Does the hydraulic model actually help? (ablation)
+
+Ridge, same grouped CV:
+
+| feature set | RMSE | R² | ΔR² |
+|---|---|---|---|
+| temperature only | 1.880 | 0.328 | — |
+| + season | 1.902 | 0.312 | −0.016 |
+| + discharge | 1.929 | 0.293 | −0.019 |
+| **+ hydraulics (HEC-RAS)** | **1.843** | **0.355** | **+0.062** |
+| hydraulics only | 2.570 | −0.256 | — |
+
+**Modest, but real, and the shape of it is the interesting part.** Adding raw
+discharge *hurts* (−0.019). Adding the hydraulic model's transformation of that
+same discharge into depth, velocity, width and Froude number *helps* (+0.062 over
+discharge, +0.027 over temperature alone).
+
+So the physics-informed transformation carries information the raw driver does
+not — which is the project's central claim, demonstrated on real labels. It is a
+small effect and should be reported as one; hydraulics alone predict nothing
+(R² −0.26), because DO is thermally driven first.
+
 ## Benchmarks — to re-derive
 
 The R² 0.80–0.88 in §9 was set against the hourly-series design and should not be
