@@ -2,8 +2,9 @@
 
 **Project**: AquaNexus — Physics-Informed ML Framework for Aquatic Ecosystem Diagnosis  
 **Developer**: kiruthick01  
-**Timeline**: 2026-09-05 → in progress  
-**Status**: 🟡 In Progress  
+**Timeline**: 2026-09-05 → 2026-09-07  
+**Status**: 🟢 Complete — one claim outstanding: neither container image has been
+built (no Docker daemon on this machine; CI builds both on its first run)  
 **Repository**: https://github.com/kiruthick01/aquanexus  
 
 ---
@@ -109,8 +110,8 @@ AquaNexus is a **proof-of-concept system** demonstrating competency in:
 ## Phase 1: Foundation & HEC-RAS Integration
 
 **Planned**: Days 1-5  
-**Actual**: [Start] → [End]  
-**Status**: 🟡 In Progress
+**Actual**: 2026-09-06 → 2026-09-06  
+**Status**: 🟢 Complete
 
 ### 1a. Project Setup & Architecture
 - [x] Directory structure created
@@ -163,10 +164,7 @@ then measurable recovery under 清流ルネッサンス. A real documented water
 gradient is worth more to this project than a synthetic one.
 ```
 
-**Commit**: `git log --oneline | head -1`
-```
-[Paste commit hash & message]
-```
+**Commit**: `6d4494d` Initial project structure and data source audit
 
 ---
 
@@ -284,10 +282,7 @@ relationship the habitat model is supposed to reproduce. It also gives a genuine
 check on the synthetic labels: if the generated HSI does not degrade under the
 warm/low-DO conditions seen here, the label function is wrong.
 
-**Commit**:
-```
-[Paste commit hash & message]
-```
+**Commit**: `6d4494d` Initial project structure and data source audit
 
 ---
 
@@ -325,44 +320,31 @@ expected direction, so the reach is coherent overall with local noise where the
 centreline (derived from tile centroids) wanders off the channel. Those sections
 should be excluded or re-cut before the geometry is used for anything load-bearing.
 
-**Date Started**: _______________  
-**Date Completed**: _______________  
+**Date Started**: 2026-09-06  
+**Date Completed**: 2026-09-07  
 
 **Data Statistics**:
 ```
-Dataset: [Name]
-Rows: ________
-Columns: ________
-Date range: ________ to ________
-Completeness: ________%
-Missing values: ________ (handled via: ________)
-Temporal coverage: ________ days
-Spatial coverage: ________ river reaches
+Water quality:   3,892 samples over 3 fiscal years (FY2022-24), 101-102
+                 parameters per file, 2022-04-06 to 2025-03-12
+  Ayase subset:  216 samples, 5 stations; 138 carry both discharge and DO
+  Censored:      ~9,400 values/year flagged "<" - kept as published, with the
+                 qualifier recorded separately rather than silently treated
+                 as measurements
+Point cloud:     89 tiles, 9.5 GB, contiguous over 29.4 km
+Geometry:        53 cross-sections, 27.5 km, bed falling 0.39 m/km
+Flow sweep:      53 sections x 12 log-spaced discharges (0.17-73.7 m3/s)
+State vectors:   7,314 rows x 35 columns (53 sections x 138 observations)
 ```
 
-**Features Created**:
-```
-Hydrodynamic:  [List]
-Thermal:       [List]
-Water quality: [List]
-Sediment:      [List]
-Derived:       [List]
-```
+**Features Created**: 12 derived, in `aquanexus.data.preprocessor` - DO
+saturation (Benson-Krause, tested to +/-0.03 mg/L against the published table),
+DO deficit and percent saturation, Froude, Reynolds, shear stress, thermal and
+oxygen stress indices, and three interaction terms. Lagged and rolling features
+from ML_STRATEGY §3.2 are deliberately **not** produced: they assume an hourly
+chronology this dataset does not have.
 
-**Data Quality Issues Found**:
-```
-[List any outliers, gaps, anomalies discovered]
-```
-
-**Correlation Insights**:
-```
-[Key correlations between environmental variables]
-```
-
-**Commit**:
-```
-[Paste commit hash & message]
-```
+**Commit**: `62decfb` Add point cloud ingest and cross-section extraction · `f578182` Run HEC-RAS end to end
 
 **Phase 1 Summary**:
 ```
@@ -378,8 +360,8 @@ Derived:       [List]
 ## Phase 2: Machine Learning Pipeline
 
 **Planned**: Days 6-12  
-**Actual**: [Start] → [End]  
-**Status**: 🟡 In Progress
+**Actual**: 2026-09-06 → 2026-09-07  
+**Status**: 🟢 Complete
 
 ### 2a. Model Architecture & Training
 - [x] Environmental state vectors (moved from 1c) — 7,314 rows, 53 sections x 138 obs
@@ -408,8 +390,8 @@ in docs/ML_METHODOLOGY.md with the full diagnosis.
 - [x] Training notebook (03_model_training.ipynb)
 - [x] Unit tests for models
 
-**Date Started**: _______________  
-**Date Completed**: _______________  
+**Date Started**: 2026-09-06  
+**Date Completed**: 2026-09-07  
 
 **Model Configuration**:
 ```python
@@ -426,32 +408,26 @@ temporal_split: True
 
 **Training Results**:
 ```
-Dataset splits:
-  Train: [N] rows (______% of data)
-  Val:   [N] rows (______% of data)
-  Test:  [N] rows (______% of data)
+Synthetic HSI (xgboost, grouped split - whole observations held out):
+  Train 4,717 (64%) | Val 1,113 (15%) | Test 1,484 (20%)
+  RMSE 0.024   MAE 0.015   R2 0.993   skill vs mean 0.993
 
-Training time: ________ seconds
-Model size: ________ MB
-Training log:
-  [Iteration 1]: loss = ____
-  [Iteration 50]: loss = ____
-  [Final]: loss = ____
-```
+Observed DO (Ridge, grouped CV - each of 4 stations held out in turn):
+  138 rows, 10 features, no holdout to spare - every row is scored
+  out-of-fold
+  RMSE 1.713   MAE 1.232   R2 0.442   Pearson 0.680   NSE 0.442
 
-**Model Performance (Test Set)**:
-```
-RMSE: ________
-MAE:  ________
-R²:   ________
-Pearson correlation: ________
-Nash-Sutcliffe Efficiency (NSE): ________
+scripts/train_models.py end to end: 6.0 s
+Artefacts: hsi_v1.joblib 674 KB, dissolved_oxygen_v1.joblib 2.5 KB,
+           plus a 100-row SHAP background per model
 ```
 
-**Commit**:
-```
-[Paste commit hash & message]
-```
+**Model Performance**: the two rows above are the whole finding. R2 0.993 on
+generated labels is function recovery; R2 0.442 on measured labels is the
+result. Reporting the first without the second would be the single most
+misleading thing this project could do.
+
+**Commit**: `2464989` Add data validator, notebooks and HEC-RAS guide · `f734d0f` Build and run the full 27.5 km reach
 
 ---
 
@@ -480,56 +456,43 @@ the 2x2 design). The explainer reports that rather than returning NaN.
 - [x] Critical thresholds discovered
 - [x] Explainability notebook (04_explainability.ipynb)
 
-**Date Started**: _______________  
-**Date Completed**: _______________  
+**Date Started**: 2026-09-06  
+**Date Completed**: 2026-09-07  
 
-**Feature Importance (Top 10)**:
+**Feature Importance** (mean |SHAP|, dissolved oxygen, all 138 rows):
 ```
-1. [Feature]: [Importance score]
-2. [Feature]: [Importance score]
-3. [Feature]: [Importance score]
-...
-```
+Ranked, but NOT rankable: 10 feature pairs correlate above 0.9, so SHAP
+divides credit between them arbitrarily. Read the hydraulic features as one
+combined contribution.
 
-**Critical Thresholds Discovered**:
-```
-1. [Variable] < [Value] → [Consequence]
-   Example: DO < 2 mg/L → Severe oxygen stress
-
-2. [Variable] > [Value] → [Consequence]
-   Example: Temperature > 30°C → Heat stress
-
-3. [Var1] × [Var2] interaction:
-   Example: Temp > 25°C AND DO < 4 mg/L → Critical combination
+do_saturation, reach_froude, reach_depth, month_sin, air_temp, discharge,
+reach_velocity, reach_top_width, month_cos, water_temp
 ```
 
-**Interaction Findings**:
+**Critical Thresholds Discovered** (marginal response across the observed range,
+everything else at its median):
 ```
-Strongest interactions detected:
-  - [Feature1] × [Feature2]: strength = ______
-  - [Feature1] × [Feature2]: strength = ______
-  - [Feature1] × [Feature2]: strength = ______
+do_saturation    span 5.42 mg/L   steepest at 8.22 mg/L   influential
+reach_top_width  span 3.62 mg/L   steepest at 39.7 m      influential
+air_temp         span 2.33 mg/L   steepest at 6.8 °C      influential
+reach_froude     span 1.90 mg/L   steepest at 0.039       influential
+reach_depth      span 1.70 mg/L   steepest at 2.04 m      influential
+discharge        span 1.53 mg/L   steepest at 16.6 m3/s   influential
+water_temp       span 0.32 mg/L                           NOT influential
 ```
+`water_temp` looks inert only because the model routes the thermal signal
+through `do_saturation`, which is a deterministic function of it (r = -0.99).
+Temperature matters most of all; this is the collinearity caveat made visible.
 
-**SHAP Explanation Example**:
-```
-Prediction: 0.72 (habitat suitability)
-Expected value: 0.65
-Feature contributions:
-  + DO: +0.15 (beneficial)
-  - Temperature: -0.08 (harmful)
-  + Flow: +0.05 (beneficial)
-  - Sediment: -0.04 (harmful)
-Base value + sum of contributions = 0.72 ✓
+**Interaction Findings**: of four pairs tested, two are unidentifiable (an empty
+corner in the 2x2 design, because the features correlate at 0.89-0.99) and the
+explainer reports that rather than returning NaN. The one headline result -
+water_temp x discharge synergistic at -1.02 mg/L - was **retracted on 09-07**:
+it came from a single station's 48 rows, and pooled over all 138 the sign
+reverses (+0.23, per-station range -0.93 to +1.72). Not established at this
+sample size.
 
-Interpretation: "Moderate habitat suitability despite elevated temperature, 
-primarily driven by adequate dissolved oxygen and flow conditions."
-```
-
-**Commit**:
-```
-[Paste commit hash & message]
-```
+**Commit**: `aaeb189` Phase 2a: state vectors, splits, models and benchmark · `5d8d652` Add dissolved oxygen target
 
 ---
 
@@ -548,56 +511,52 @@ the mean. Full numbers in docs/ML_METHODOLOGY.md.
 - [x] Baseline comparisons (hydraulic-only, linear, persistence)
 - [x] Validation notebook (05_model_validation.ipynb)
 
-**Date Started**: _______________  
-**Date Completed**: _______________  
+**Date Started**: 2026-09-06  
+**Date Completed**: 2026-09-07  
 
-**Validation Results Table**:
+**Validation Results Table** (grouped CV, each station held out, observed DO):
 ```
-| Model              | RMSE  | MAE  | R²   | Temporal | Spatial | Event  | Status      |
-|--------------------|-------|------|------|----------|---------|--------|-------------|
-| XGBoost (ML)       | 0.12  | 0.08 | 0.84 | ✓ PASS   | ✓ PASS  | ✓ PASS | ✅ Selected |
-| Random Forest (ML) | 0.15  | 0.10 | 0.81 | ✓ PASS   | ✓ PASS  | ✓ PASS | ✓ Backup    |
-| Linear Regression  | 0.25  | 0.18 | 0.62 | ✗ FAIL   | ✗ FAIL  | ✗ FAIL | ✗ Rejected  |
-| Hydraulic-only     | 0.30  | 0.22 | 0.55 | ✗ FAIL   | ✗ FAIL  | ✗ FAIL | ✗ Baseline  |
-| Persistence        | 0.35  | 0.28 | 0.45 | ✗ FAIL   | ✗ FAIL  | ✗ FAIL | ✗ Baseline  |
+| Model            | RMSE  | MAE   | R²     | Verdict                          |
+|------------------|-------|-------|--------|----------------------------------|
+| Ridge (linear)   | 1.713 | 1.232 |  0.442 | ✅ Selected — best RMSE           |
+| Persistence      | 1.818 | 1.213 |  0.385 | ⚠ Beats the model on MAE         |
+| Random forest    | 1.879 | 1.417 |  0.329 | ✗ Overfits at n=138              |
+| XGBoost          | 1.904 | 1.409 |  0.311 | ✗ Overfits at n=138              |
+| Mean (floor)     | 2.294 | 1.779 |  0.000 | — the floor                      |
+| Hydraulic-only   | 2.467 | 1.862 | -0.157 | ✗ Worse than guessing the mean   |
+| DO saturation    | 2.900 | 2.577 | -0.598 | ✗ Right shape, +2.39 mg/L bias   |
 ```
+The plan predicted XGBoost 0.84 and linear 0.62. Both are wrong in both
+directions: the tree models lose, and nothing gets near 0.84 on real labels.
 
-**Temporal Generalization**:
-```
-Training period: [Date] to [Date]
-Validation period: [Date] to [Date]
-Test period: [Date] to [Date]
+**Temporal Generalization**: not applicable. The dataset is a designed
+experiment over flow space, not a chronology — there is no "future" to hold out.
+`temporal_split()` exists for the observations, which do carry dates, but that is
+a weaker claim than ML_STRATEGY §5.1 makes and is not what the shipped model is
+validated on.
 
-Model maintains RMSE < 0.15 across all three periods: ✓ GOOD
-No overfitting detected: ✓ CONFIRMED
+**Spatial Generalization** (the real version — whole stations held out):
 ```
+55畷橋            n=36   observed mean 8.36   RMSE 2.206   bias -1.540
+54槐戸橋          n=36   observed mean 7.39   RMSE 1.793   bias -0.444
+57綾瀬川合流点前   n=18   observed mean 6.27   RMSE 1.439   bias +1.205
+52内匠橋          n=48   observed mean 6.15   RMSE 1.266   bias +0.115
+```
+The upstream station is the hard one: it is shallow, low-flow and oxygen-rich,
+and the model pulls it toward the reach mean.
 
-**Spatial Generalization**:
+**Event-based Generalization** (tails of the drivers, standing in for events):
 ```
-Trained on reaches: [List]
-Tested on reaches: [List]
+low flow  (≈1.1 m3/s)   n=21   RMSE 2.532   bias -2.011
+middle    (≈13 m3/s)    n=96   RMSE 1.634   bias -0.043
+high flow (≈52 m3/s)    n=21   RMSE 0.818   bias +0.103
+```
+**The −2 mg/L low-flow bias is the headline limitation of the whole project.**
 
-Performance drop from training to spatial test: _______%
-Threshold: acceptable if < 10%
-Result: ✓ ACCEPTABLE
-```
-
-**Baseline Comparison**:
-```
-XGBoost vs Hydraulic-only:
-  RMSE improvement: ______% better
-  R² improvement: ______% better
-  Verdict: ML provides significant value
-
-XGBoost vs Linear regression:
-  RMSE improvement: ______% better
-  Verdict: Non-linear relationships matter
-```
-
-**Commit**:
-```
-[Paste commit hash & message]
-```
+**Baseline Comparison**: the model beats persistence by 0.105 mg/L RMSE and
+0.057 R², and **loses to it on MAE** (1.232 vs 1.213). It earns its place by
+generalising to unseen stations and by accepting hypothetical states — not by
+being much more accurate than "same as last month".
 
 **Phase 2 Summary**:
 ```
@@ -614,80 +573,63 @@ XGBoost vs Linear regression:
 ## Phase 3: Backend API
 
 **Planned**: Days 13-16  
-**Actual**: [Start] → [End]  
-**Status**: 🟡 In Progress
+**Actual**: 2026-09-06 → 2026-09-07  
+**Status**: 🟢 Complete
 
 ### 3a. API Design & Core Endpoints
 - [x] FastAPI app skeleton
-- [ ] Pydantic request/response schemas
-- [ ] POST /predict endpoint
-- [ ] POST /batch_predict endpoint
-- [ ] GET /health endpoint
-- [ ] Swagger/OpenAPI docs auto-generated
-- [ ] Unit tests for routes
+- [x] Pydantic request/response schemas
+- [x] POST /predict endpoint
+- [x] POST /batch_predict endpoint
+- [x] GET /health endpoint (plus GET /models, POST /explain, POST /scenario_run)
+- [x] Swagger/OpenAPI docs auto-generated (/docs, /openapi.json)
+- [x] Unit tests for routes — 24, plus 24 integration tests added in 3b
 
-**Date Started**: _______________  
-**Date Completed**: _______________  
+**Date Started**: 2026-09-06  
+**Date Completed**: 2026-09-07  
 
-**API Endpoints Implemented**:
+**API Endpoints Implemented** (all seven — see docs/API_REFERENCE.md):
 ```
-✓ POST /predict
-  Input: EnvironmentalState (temperature, DO, flow, sediment, depth, velocity)
-  Output: PredictionResponse (score 0-1, confidence, message)
-  Status: ✓ WORKING
-
-✓ POST /batch_predict
-  Input: CSV file with multiple observations
-  Output: Array of predictions
-  Status: ✓ WORKING
-
-✓ GET /health
-  Output: {"status": "ok", "service": "AquaNexus API"}
-  Status: ✓ WORKING
-
-Planned:
-  - POST /scenario_run
-  - GET /explain/{id}
-  - POST /interactive_analysis
+GET  /                service description
+GET  /health          liveness + whether models loaded; "degraded" with a reason
+GET  /models          provenance, metrics, caveats, training ranges per model
+POST /predict         value + interpretation + caveats + out-of-range flags
+POST /batch_predict   1–1000 states; a bad row returns NaN rather than voiding
+POST /explain         SHAP contributions + the collinear pairs that make them
+                      unrankable
+POST /scenario_run    fractional what-ifs against a baseline
 ```
+Departures from the original sketch: no CSV upload (JSON throughout), no
+`/explain/{id}` (nothing is stored, so there is no id), and no
+`/interactive_analysis` — the dashboard's Analyze page is `/batch_predict` over
+a grid, which needed no new endpoint.
 
-**Example Request/Response**:
+**Example Request/Response** (real, from a running instance):
 ```json
 // POST /predict
-Request:
-{
-  "timestamp": "2024-01-15T10:30:00",
-  "temperature": 24.5,
-  "dissolved_oxygen": 7.2,
-  "flow": 150.0,
-  "suspended_sediment": 45.3,
-  "depth": 1.8,
-  "velocity": 0.85
-}
+{"target": "dissolved_oxygen",
+ "state": {"water_temp": 24.5, "discharge": 12.0, "depth": 2.9,
+           "velocity": 0.41, "month": 7}}
 
-Response:
-{
-  "prediction": 0.72,
-  "confidence": 0.92,
-  "message": "Habitat suitability is moderate (72%). Environmental conditions support limited biological communities.",
-  "timestamp": "2024-01-15T10:30:00"
-}
+{"target": "dissolved_oxygen",
+ "prediction": 5.83,
+ "unit": "mg/L",
+ "interpretation": "5.83 mg/L - adequate for most species",
+ "labels": "observed",
+ "uncertainty": null,
+ "out_of_range": [],
+ "caveats": ["Labels are real measurements from the 公共用水域 monitoring record.",
+             "Beats a persistence baseline by only 0.06 R2 and loses to it on MAE.",
+             "..."]}
 ```
 
-**API Testing**:
-```bash
-curl -X POST http://localhost:8000/api/predict \
-  -H "Content-Type: application/json" \
-  -d '{...}'
+No `confidence` field: Ridge cannot express a spread, so `uncertainty` is null
+rather than a fabricated number. No `timestamp` echo - the caller already has it.
 
-Response status: 200 ✓
-Response time: ________ ms
-```
+**API Testing**: `python scripts/verify_deployment.py` - 14 checks, all passing.
+Model loading ~60 ms, warm prediction ~3 ms, warm explanation ~190 ms.
 
-**Commit**:
-```
-[Paste commit hash & message]
-```
+**Commit**: `9d3266d` Phase 3a: FastAPI backend serving both models with provenance
 
 ---
 
@@ -774,8 +716,8 @@ Phase 3b: integration tests, deployment verification, three fixes
 ## Phase 4: Frontend & Deployment
 
 **Planned**: Days 17-28  
-**Actual**: [Start] → [End]  
-**Status**: 🟡 In Progress
+**Actual**: 2026-09-07 → 2026-09-07  
+**Status**: 🟢 Complete — dashboard built and driven in a browser; images unbuilt
 
 ### 4a. React Frontend
 - [x] React project initialised (Vite + TypeScript, React 19)
@@ -805,8 +747,8 @@ mocking in every test; and a dozen components do not need a framework. The CSS t
 are the same ink/accent/cool used by `scripts/make_figures.py`, so the app and the
 README figures read as one project.
 
-**Date Started**: _______________  
-**Date Completed**: _______________  
+**Date Started**: 2026-09-06  
+**Date Completed**: 2026-09-07  
 
 **API Integration Test** — driven in a real Chrome, not just jsdom:
 ```
@@ -833,10 +775,7 @@ Frontend http://localhost:3000  ->  Backend http://localhost:8002
 
 **Bundle**: 262 kB (83 kB gzipped), 38 modules, ~0.5 s build.
 
-**Commit**:
-```
-[Paste commit hash & message]
-```
+**Commit**: `1708e87` Phase 2c: validation, baselines and a short-form daily log
 
 ---
 
@@ -852,8 +791,8 @@ Frontend http://localhost:3000  ->  Backend http://localhost:8002
 - [ ] `docker build` still unrun locally — no daemon; the CI `containers` job is
       the first place either image is actually built
 
-**Date Started**: _______________  
-**Date Completed**: _______________  
+**Date Started**: 2026-09-06  
+**Date Completed**: 2026-09-07  
 
 **Test Coverage**:
 ```
@@ -898,10 +837,7 @@ nothing here is production-hardened, and `docs/DEPLOYMENT.md` lists what would
 have to change first (no auth, no TLS, no rate limiting, artefacts mounted from
 the host).
 
-**Final Commit**:
-```
-[Paste commit hash & message]
-```
+**Final Commit**: `f7b2d7d` Phase 4: React dashboard, container build, CI
 
 **Phase 4 Summary**:
 ```
@@ -918,95 +854,149 @@ the host).
 
 ## Project Completion Checklist
 
-- [ ] **Phase 1**: Data pipeline complete, 50K+ records processed
-- [ ] **Phase 2**: Model trained (R² ≥ 0.80), explainability working
-- [ ] **Phase 3**: FastAPI backend fully functional, Docker ready
-- [ ] **Phase 4**: React frontend polished, tests passing, CI/CD active
-- [ ] **Documentation**: README, ARCHITECTURE, API_REFERENCE, DEPLOYMENT
-- [ ] **GitHub**: Clean commit history, professional repo
-- [ ] **Model file**: data/models/xgboost_v1.joblib (serialized)
-- [ ] **DEVLOG.md**: Complete development chronicle
-- [ ] **Production ready**: docker-compose up → works perfectly
+Ticked against what was actually built, with the original target kept where it
+turned out to be the wrong target.
 
----
+- [x] **Phase 1**: Data pipeline complete — ~~50K+ records~~ **3,892 water
+      quality samples and 9.5 GB of point cloud**. The 50K figure assumed an
+      hourly series that does not exist for any open Japanese river; the audit
+      that established this is `docs/DATA_SOURCES.md`.
+- [x] **Phase 2**: Model trained, explainability working — ~~R² ≥ 0.80~~
+      **R² 0.442 on real labels**. The 0.80 target was set against synthetic
+      labels, where this project scores 0.993 and the number means nothing.
+      0.442 on measured oxygen is the honest result and it is a modest one.
+- [x] **Phase 3**: FastAPI backend fully functional — seven endpoints, 48 tests.
+      **Docker ready but unbuilt**: no daemon on this machine.
+- [x] **Phase 4**: React frontend, tests passing, CI/CD configured — 22 frontend
+      tests, workflow on push and PR. The CI has never run; the first run is
+      also the first time either image is built.
+- [x] **Documentation**: README, ARCHITECTURE, API_REFERENCE, DEPLOYMENT,
+      ML_METHODOLOGY, DATA_SOURCES, HECRAS_GUIDE, frontend README, 5 notebooks
+- [x] **GitHub**: clean history, 24 commits, each explaining why
+- [x] **Model files**: ~~xgboost_v1.joblib~~ **dissolved_oxygen_v1.joblib +
+      hsi_v1.joblib + manifest.json + a SHAP background each**. Two models, not
+      one, because one of them is trained on generated labels and shipping only
+      that would have been the dishonest choice.
+- [x] **DEVLOG.md**: complete chronicle, including the retraction
+- [ ] **Production ready**: `docker compose up` → **unverified**. It is the one
+      claim in this list that cannot be made from this machine, and it is not
+      going to be made without evidence.
 
 ## Key Metrics & Results
 
-**Data Pipeline**:
+**Data Pipeline**
 ```
-Dataset: [River name]
-Records: ________
-Features: ________
-Time period: ________ to ________
-Completeness: ________%
-```
-
-**Model Performance**:
-```
-RMSE: ________
-MAE: ________
-R²: ________
-Pearson correlation: ________
-Temporal generalization: ✓ PASS
-Spatial generalization: ✓ PASS
-Event-based generalization: ✓ PASS
+River:         Ayase (綾瀬川), Saitama — 27.5 km, 53 cross-sections
+Records:       3,892 water quality samples; 216 on the Ayase; 138 modelled
+Features:      26 (synthetic HSI dataset) / 10 (observed DO dataset)
+Time period:   2022-04-06 to 2025-03-12 (FY2022-24)
+Completeness:  138 of 216 Ayase samples carry both discharge and DO (64%)
+               ~9,400 censored values per year, kept as published
 ```
 
-**System Performance**:
+**Model Performance** (grouped CV, whole stations held out — observed DO)
 ```
-Prediction latency: ________ ms
-Batch prediction (100 rows): ________ ms
-API response time: ________ ms
-Frontend load time: ________ ms
+RMSE: 1.713 mg/L        Pearson: 0.680
+MAE:  1.232 mg/L        NSE:     0.442
+R²:   0.442             Skill vs mean: 0.442
+
+Temporal generalisation: N/A — designed experiment, no chronology to split
+Spatial generalisation:  ✓ tested, 4 stations held out in turn (RMSE 1.27–2.21)
+Event generalisation:    ⚠ tested and FAILS at low flow (bias −2.01 mg/L)
 ```
 
-**Code Quality**:
+**System Performance**
 ```
-Test coverage: ________%
-Code style: [pylint/flake8 score]
-Documentation: [lines of docs]
-Commits: [N] with clear messages
+Model loading (both):        ~60 ms
+Warm prediction:             ~3 ms
+Batch of 100 states:         ≈ the cost of one prediction
+First explanation per model: ~2.4 s (builds the SHAP explainer, once)
+Warm explanation:            ~190 ms
+Frontend bundle:             262 kB, 83 kB gzipped, ~0.4 s build
 ```
 
----
+**Code Quality**
+```
+Tests:      355 backend (pytest) + 22 frontend (vitest)
+Lint:       ruff clean across src, tests, scripts
+Docs:       8 documents + 5 executable notebooks
+Commits:    24, each stating why rather than what
+```
 
 ## Important Decisions & Rationale
 
 | Decision | Choice | Rationale |
-|----------|--------|-----------|
-| River | [River name] | [Why this river] |
-| Model | XGBoost | Fast, good performance, explainable |
-| Explainability | SHAP | Industry standard, interpretable |
-| Backend | FastAPI | Async, fast, auto-docs, easy to deploy |
-| Frontend | React + TS | Professional, type-safe, large ecosystem |
-| Deployment | Docker | Reproducibility, cloud-ready |
-
----
+|---|---|---|
+| River | Ayase (綾瀬川) | The only open Japanese source found with *submerged* channel bathymetry (UAV + multibeam, CC BY 4.0). The planned Yodo has none. |
+| Second target | Observed dissolved oxygen | The synthetic HSI made the whole project circular. A measured label was the only way to test anything. |
+| Model | **Ridge**, not XGBoost | At n=138 gradient boosting overfits and cross-validates worse. The plan assumed XGBoost throughout; the data disagreed. |
+| Both models shipped | Yes, each labelled | Serving only the 0.99 model would mislead; serving only the 0.44 model would drop the habitat framing. |
+| Explainability | SHAP with model-type dispatch | `TreeExplainer` cannot explain a Ridge pipeline, which is what actually ships. |
+| Splits | Grouped, always | 53 rows share one observation's chemistry; an ungrouped split scores memorisation. |
+| Backend | FastAPI | Async, typed, self-documenting; the schema *is* the contract the frontend imports. |
+| Frontend | React + TS, hand-written CSS | A dozen components do not need a UI kit, and the palette is shared with the figures. |
+| API client | `fetch`, not axios | ~100 lines of request building; a dependency would need mocking everywhere. |
+| Deployment | Docker + compose | Reproducible — though unverified here, and said so. |
 
 ## Challenges & Solutions
 
-### Challenge 1: [Issue]
-**Problem**: _______________
-**Solution Attempted**: _______________
-**Result**: ✓ RESOLVED / 🟡 PARTIAL / ✗ ONGOING
-**Notes**: _______________
+### Challenge 1: the planned river had no usable data
+**Problem**: The Yodo has no open channel bathymetry, and `river.go.jp` blocks
+automated access to the national hydrology database.
+**Solution**: A data availability audit *before* scaffolding, which moved the
+study site to the Ayase and changed the dataset design from a time series to a
+designed experiment over flow space.
+**Result**: ✓ RESOLVED — `docs/DATA_SOURCES.md`. Cost a day, saved the project.
 
-### Challenge 2: [Issue]
-**Problem**: _______________
-**Solution Attempted**: _______________
-**Result**: ✓ RESOLVED / 🟡 PARTIAL / ✗ ONGOING
-**Notes**: _______________
+### Challenge 2: HEC-RAS geometry that fails silently
+**Problem**: Generated `.g01` files were accepted and produced nothing usable.
+**Solution**: Bank stations must appear in the station list, and the plan file
+needs ~200 keys — templated from a real project rather than guessed.
+**Result**: ✓ RESOLVED — 53 sections, 3 profiles, bed falling 0.39 m/km.
 
----
+### Challenge 3: the machine learning was circular
+**Problem**: HSI labels are generated by this repository, so R² 0.99 measured
+how well a regressor recovers a formula the project itself wrote.
+**Solution**: Added a second target with **measured** labels (observed DO), and
+a falsification test for the synthetic ones.
+**Result**: ✓ RESOLVED — and the honest number, 0.442, is the one now reported.
+
+### Challenge 4: a published finding that did not hold
+**Problem**: A temperature × discharge synergy of −1.02 mg/L was reported in
+Phase 2b, in the README and the methodology doc.
+**Solution**: Rebuilding it for the notebooks showed it came from one station's
+48 rows; pooled over all 138 the sign reverses.
+**Result**: ✓ RETRACTED — corrected in three documents rather than quietly
+dropped.
+
+### Challenge 5: an explanation endpoint that explained nothing
+**Problem**: `/explain` returned 0.0 for every feature. The SHAP background was
+the request row itself, so baseline equalled prediction. It was well-formed,
+summed correctly, and said nothing — and a test asserting the sum passed on
+0 == 0.
+**Solution**: Ship a training-set background beside each model; build the
+explainer once per model.
+**Result**: ✓ RESOLVED — and warm explanations went from 2.4 s to 190 ms.
 
 ## Lessons Learned
 
-1. [Key learning from development]
-2. [What went well]
-3. [What could be improved]
-4. [For next version]
-
----
+1. **Audit the data before writing the code.** Three of the plan's assumptions —
+   the river, the discharge range, the record length — were wrong, and one day
+   of checking sources saved rebuilding on a foundation that did not exist.
+2. **A number without provenance is worse than no number.** Two models with
+   different label provenance made every downstream decision clearer: what to
+   test, what to serve, what to put on a badge in the UI.
+3. **Baselines are the finding.** Persistence beats this model on MAE. Without
+   that row the R² of 0.442 would have read as competence.
+4. **Tests can pass on nothing.** The contributions-sum test passed while every
+   contribution was zero. Assert that a thing is non-degenerate, not just
+   self-consistent.
+5. **Run the app.** Three defects — CORS, out-of-range defaults, and the
+   alias mismatch between UI and API — survived 377 passing tests and appeared
+   within two minutes in a browser.
+6. **For next version**: calibrate Manning's n against a gauged rating curve,
+   re-cut the four bad cross-sections, and get low-flow observations. Those three
+   things bound almost everything the project currently cannot claim.
 
 ## Next Steps (Beyond PoC)
 
@@ -1021,21 +1011,36 @@ Commits: [N] with clear messages
 
 ## Final Notes
 
-**Project Status**: 🟢 **COMPLETE**
+**Project Status**: 🟢 **COMPLETE** — with one claim outstanding: neither
+container image has been built, because this machine has no Docker daemon. CI
+builds both on the first run.
 
-This proof-of-concept successfully demonstrates:
-- HEC-RAS integration and hydraulic modeling workflow
-- Machine learning pipeline for ecosystem prediction
-- Full-stack development (Python backend + React frontend)
-- Professional software engineering practices (Docker, CI/CD, tests, docs)
+This proof of concept demonstrates:
+- **HEC-RAS integration** — driven through its COM automation server, from raw
+  bathymetric point clouds to a 53-section, 27.5 km model and a 12-discharge
+  sweep
+- **A machine learning pipeline that argues with itself** — two targets, one
+  synthetic and one measured, grouped cross-validation, baselines that the model
+  only just beats, and a finding retracted when it did not survive re-analysis
+- **Full-stack delivery** — FastAPI serving provenance and caveats with every
+  number, and a React dashboard built so the caveats cannot be separated from
+  the number
+- **Professional practice** — 377 tests, ruff clean, CI on both halves, eight
+  documents, five executable notebooks, and a debt register that travels with
+  the analysis
 
-**Recommended for**: Portfolio, GitHub showcase, IGES professor discussion, future collaborators
+**What it does not demonstrate**: ecological skill. The habitat index is trained
+on labels this repository generated, and the oxygen model beats "same as last
+month" by 0.06 R² and fails at low flow. Both are stated everywhere they appear,
+which is the point.
 
-**Last Updated**: _______________  
-**Last Commit**: _______________  
+**Recommended for**: portfolio, GitHub showcase, IGES discussion, and as a
+worked example of reporting a modest result honestly.
+
+**Last Updated**: 2026-09-07  
+**Last Commit**: `f7b2d7d` Phase 4: React dashboard, container build, CI  
 
 ---
 
 **Developer Signature**: kiruthick01  
-**Date**: _______________
-
+**Date**: 2026-09-07
