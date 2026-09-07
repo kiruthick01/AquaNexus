@@ -30,26 +30,36 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
 - **Phase 2a.** State vectors (7,314 rows). R² 0.99 on synthetic labels — flagged as function recovery, not skill.
 - **Course correction.** Raised that the ML was circular. Found real biology data (河川水辺の国勢調査) — n=6 for Ayase, too small to train, good for validation.
 - **Real ML target added.** Observed DO, n=138. R² 0.44 grouped CV. Ayase runs ~2.4 mg/L below saturation.
-- **Phase 2b.** SHAP. temp × discharge synergistic at −1.02 mg/L. 12 collinear pairs → 2 of 4 interactions unidentifiable, reported as such.
+- **Phase 2b.** SHAP. ~~temp × discharge synergistic at −1.02 mg/L~~ (retracted 09-07, see below). 12 collinear pairs → 2 of 4 interactions unidentifiable, reported as such.
 - **Phase 2c.** Validation + baselines. Model beats persistence by only 0.06 R². Under-predicts DO by 2 mg/L at low flow.
 - **Phase 3a.** FastAPI up. Serves both models with provenance + caveats in every response. 25 API tests.
   - Scenario endpoint shows the low-flow flaw in action: −60% discharge *raises* predicted DO, which is physically wrong. Caveat is real, not boilerplate.
 - **README + repo metadata.** 7 figures generated from real project output (`scripts/make_figures.py`), 3 mermaid diagrams. GitHub description + 18 topics set. Japanese data provenance surfaced throughout.
 
+### 2026-09-07
+- **Phase 2 notebooks.** 03 training, 04 explainability, 05 validation. All three run end to end from a clean kernel; committed unexecuted, as 01 and 02 are.
+- **Retraction found while rebuilding 2b.** The −1.02 mg/L temp × discharge synergy was one station's 48 rows. Pooled over 138 it is +0.23 and the per-station sign flips (−0.93 to +1.72). Corrected in README, ML_METHODOLOGY, and here. Nothing depended on it — the API does not serve interactions.
+- **Scenario diagnosis sharpened.** "Physically wrong" was too strong: DO and discharge are negatively associated *within every station* (−0.14 to −0.60), so the model reproduces the record rather than inventing a sign. What is genuinely broken is that `/scenario_run` holds depth/velocity/width fixed while discharge moves — an impossible state — and that low flow is outside usable support (bias −2 mg/L, and "low flow" is largely one shallow station).
+- **Ablation reproduced exactly** against the documented ladder, plus one honest addition: adding air temperature (+0.073 R²) buys more than the whole HEC-RAS pipeline does (+0.027).
+
 
 ### Next session — pick up here
 
-**State:** Phases 1, 2, 3a done. 313 tests, lint clean, all pushed.
+**State:** Phases 1, 2 (incl. all 5 notebooks), 3a done. 313 tests, lint clean, all pushed.
 
 **Next, in order of value:**
-1. `03_model_training.ipynb` + `04_explainability.ipynb` + `05_model_validation.ipynb` — Phase 2 debt. The honest-vs-synthetic comparison in a form a professor can read.
-2. Phase 3b — Docker verify (never tested, no Docker on this machine), integration tests.
-3. Phase 4 — React frontend.
+1. Phase 3b — Docker verify (never tested, no Docker on this machine), integration tests.
+2. Phase 4 — React frontend.
+3. Optional, cheap: re-derive reach hydraulics from the sweep inside `/scenario_run` (see below).
 
 **Known debt:**
 - 4 cross-sections cut through constrictions (RS 12500/14000/18000/24000) — flagged by validator, not excluded.
-- Scenario endpoint unreliable at low flow (−60% discharge *raises* predicted DO; physically backwards).
-- Manning's n uncalibrated.
+- Manning's n uncalibrated — depth/velocity carry unquantified systematic error.
+- `/scenario_run` holds depth/velocity/width fixed when discharge changes, so every discharge scenario describes a state the river cannot be in. Fix: re-interpolate from `ayase_flow_sweep.csv` (worked example in 05 §6).
+- Scenario answers below ~2 m³/s should not be believed regardless of that fix — the model is biased −2 mg/L there and drought mechanisms (heat, residence time, concentrated load) are not in the feature set.
+- Model beats persistence by only 0.06 R² and loses on MAE; predicted range 3.3–10.1 mg/L against an observed 3.0–17.0, so it cannot flag hypoxic events.
+- HSI labels remain synthetic; only the falsification test constrains them.
+- The full debt register is also in `05_model_validation.ipynb` §7, so it travels with the analysis.
 
 **To rebuild anything:**
 ```
@@ -376,7 +386,7 @@ in docs/ML_METHODOLOGY.md with the full diagnosis.
 - [x] Training pipeline with validation
 - [x] Model serialization (pickle/joblib)
 - [ ] Hyperparameter tuning (optional — skipped, n=138 does not support it)
-- [ ] Training notebook (03_model_training.ipynb)
+- [x] Training notebook (03_model_training.ipynb)
 - [x] Unit tests for models
 
 **Date Started**: _______________  
@@ -434,11 +444,14 @@ Nash-Sutcliffe Efficiency (NSE): ________
 - [x] Summary plot + saved SHAP values
 - [x] Collinearity detection
 
-**Key result**: water_temp x discharge interact synergistically at -1.02 mg/L -
-warm water plus high flow depresses oxygen more than the parts added. Coherent for
-an urban river carrying storm load.
+**Key result — RETRACTED 2026-09-07**: this said water_temp x discharge interact
+synergistically at -1.02 mg/L. That run explained a 48-row subset, which is one
+station (52内匠橋). Over all 138 observations the interaction is +0.23 mg/L and the
+sign flips per station (-0.93 to +1.72). Not established at this sample size. Full
+working in 04_explainability.ipynb; docs/ML_METHODOLOGY.md and README corrected.
 
-**Key limitation found**: 12 feature pairs correlate at |r| >= 0.9, so individual
+**Key limitation found**: 10 feature pairs correlate at |r| >= 0.9 over all 138
+rows (12 over that 48-row subset — the count moves with what is explained), so individual
 SHAP ranks are not trustworthy - the hydraulic features are all derived from
 discharge. Two of four interaction pairs are *unidentifiable* (an empty corner in
 the 2x2 design). The explainer reports that rather than returning NaN.
@@ -446,7 +459,7 @@ the 2x2 design). The explainer reports that rather than returning NaN.
 - [x] Feature importance ranking
 - [x] Interaction analysis
 - [x] Critical thresholds discovered
-- [ ] Explainability notebook (04_explainability.ipynb)
+- [x] Explainability notebook (04_explainability.ipynb)
 
 **Date Started**: _______________  
 **Date Completed**: _______________  
@@ -514,7 +527,7 @@ the mean. Full numbers in docs/ML_METHODOLOGY.md.
 - [x] Spatial validation (train on some reaches, test on others)
 - [x] Event-based validation (normal vs extreme conditions)
 - [x] Baseline comparisons (hydraulic-only, linear, persistence)
-- [ ] Validation notebook (05_model_validation.ipynb)
+- [x] Validation notebook (05_model_validation.ipynb)
 
 **Date Started**: _______________  
 **Date Completed**: _______________  

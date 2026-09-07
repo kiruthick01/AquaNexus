@@ -231,13 +231,14 @@ This is surfaced in the API response, not left in a table.
 SHAP with model-type dispatch — `TreeExplainer` for ensembles, `KernelExplainer` for
 the Ridge pipeline.
 
-**Finding:** water temperature × discharge interact **synergistically at −1.02 mg/L**.
-Warm water combined with high flow depresses oxygen by a full mg/L more than the two
-effects added separately — coherent for an urban lowland river, where high flow
-carries storm and combined-sewer load while warm water both holds less oxygen and
-accelerates respiration.
+**Retracted finding:** an earlier run reported water temperature × discharge as
+interacting **synergistically at −1.02 mg/L**. That was computed on one station's 48
+observations. Pooled over all 138 the interaction is **+0.23 mg/L**, and the sign
+flips between stations (−0.93 to +1.72). The effect is not established at this sample
+size, and the retraction is worked through in
+[`notebooks/04_explainability.ipynb`](notebooks/04_explainability.ipynb).
 
-**Limitation, reported rather than hidden:** twelve feature pairs correlate at
+**Limitation, reported rather than hidden:** ten feature pairs correlate at
 |r| ≥ 0.9, because the hydraulic features are all derived from discharge through the
 same model. SHAP sums correctly per prediction but divides credit between such
 features arbitrarily. Two of four interaction pairs tested are outright
@@ -376,7 +377,7 @@ Stated here rather than discovered later:
 | [`docs/HECRAS_GUIDE.md`](docs/HECRAS_GUIDE.md) | File-format rules that fail silently |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module boundaries and design decisions |
 | [`DEVLOG.md`](DEVLOG.md) | Short daily progress notes |
-| [`notebooks/`](notebooks/) | Point-cloud→hydraulics walkthrough; data exploration |
+| [`notebooks/`](notebooks/) | Point-cloud→hydraulics walkthrough, data exploration, training, SHAP, validation |
 
 ---
 

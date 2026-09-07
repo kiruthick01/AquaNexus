@@ -324,14 +324,34 @@ Of the pairs tested, **only one is identifiable**:
 
 | pair | correlation | result |
 |---|---|---|
-| water_temp × discharge | +0.24 | **interaction −1.02 mg/L — synergistic** |
+| water_temp × discharge | +0.13 | interaction +0.23 mg/L — **not established**, see below |
 | water_temp × do_saturation | −0.99 | not identifiable (empty cells) |
-| discharge × reach_velocity | +0.97 | not identifiable (empty cells) |
+| discharge × reach_velocity | +0.89 | not identifiable (empty cells) |
 
-Warm water combined with high discharge depresses dissolved oxygen by **1.0 mg/L
-more than the two effects added separately**. That is ecologically coherent for an
-urban lowland river: high flow carries storm and combined-sewer load, and warm
-water both holds less oxygen and accelerates microbial respiration.
+#### Correction (2026-09-07): the synergy was a single-station result
+
+This section previously reported water_temp × discharge as **synergistic at
+−1.02 mg/L**, with a correlation of +0.24 — warm water plus high flow depressing
+oxygen more than the parts added. Rebuilding the analysis for
+`notebooks/04_explainability.ipynb` showed that figure came from explaining a
+48-row subset, which is one station (52内匠橋). Over all 138 observations the same
+call returns **+0.23 mg/L**, and per station the sign flips:
+
+| subset | n | correlation | interaction |
+|---|---|---|---|
+| 52内匠橋 | 48 | +0.24 | −0.93 |
+| 54槐戸橋 | 36 | +0.48 | −0.53 |
+| 55畷橋 | 36 | +0.69 | **+1.72** |
+| 57綾瀬川合流点前 | 18 | +0.07 | +0.87 |
+| all stations | 138 | +0.13 | +0.23 |
+
+With 18–48 observations per station and a temperature–discharge correlation that
+is itself unstable, this design cannot resolve an interaction of that size. The
+mechanism remains plausible — storm load arriving with warm water is real in urban
+lowland rivers — but plausible is not measured, and it should not have been
+reported as a finding. The collinearity count below moves with the explained
+subset for the same reason: **ten** pairs at |r| ≥ 0.9 over all 138 rows, twelve
+over that one station's 48.
 
 The other pairs cannot be answered from this data at all. When two features
 correlate at 0.97+, one corner of the two-by-two design is empty — "high discharge,
@@ -341,7 +361,8 @@ a NaN there reads as "no interaction" when the truth is "cannot tell".
 
 ### Collinearity: why individual SHAP ranks here are not trustworthy
 
-**Twelve feature pairs correlate at |r| ≥ 0.9.** The hydraulic features are all
+**Ten feature pairs correlate at |r| ≥ 0.9** across all 138 observations (twelve
+over the 48-row subset the first run used). The hydraulic features are all
 derived from discharge through the same model, so depth, velocity, top width and
 Froude number are near-duplicates of one another; water temperature and DO
 saturation are deterministically related at r = −0.99.
