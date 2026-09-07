@@ -9,7 +9,7 @@ model, a trained predictor, and an explainable API — built end to end on the
 <p align="left">
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?logo=python&logoColor=white">
   <img alt="HEC-RAS 7.0" src="https://img.shields.io/badge/HEC--RAS-7.0-1f6feb">
-  <img alt="tests" src="https://img.shields.io/badge/tests-313%20passing-2ea043">
+  <img alt="tests" src="https://img.shields.io/badge/tests-348%20passing-2ea043">
   <img alt="ruff" src="https://img.shields.io/badge/lint-ruff%20clean-2ea043">
   <img alt="licence" src="https://img.shields.io/badge/licence-MIT-6e7781">
   <img alt="data" src="https://img.shields.io/badge/data-CC%20BY%204.0%20%E5%9F%BC%E7%8E%89%E7%9C%8C-e67e22">
@@ -280,6 +280,8 @@ sequenceDiagram
 
 ```bash
 uvicorn aquanexus.api.app:app --reload   # docs at localhost:8000/docs
+docker compose up                        # same thing in a container
+python scripts/verify_deployment.py      # 14 smoke checks against a running API
 ```
 
 Design decisions worth noting:
@@ -289,6 +291,17 @@ Design decisions worth noting:
 - **Partial states predict.** A grab sample is partial by nature.
 - **`/scenario_run` states plainly that it moves model inputs and does not re-run
   HEC-RAS.**
+- **Models are not baked into the image.** They are build outputs, so the container
+  reads them from the mounted `./data`. Without that mount it starts *degraded* and
+  `/health` says why, rather than serving predictions from nothing.
+
+Full reference: [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md).
+
+> **Container status:** the image has never been built — Docker is not installed on
+> the development machine. Everything checkable without a daemon is covered by
+> `tests/test_deployment.py`, and the install step was verified by installing the
+> package into a clean environment and serving from it. `docker build` itself is
+> unverified.
 
 ---
 
@@ -302,7 +315,7 @@ python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\act
 pip install -e ".[ml,api,dev]"                      # add ",geo" for point clouds
 cp .env.example .env
 
-pytest                                              # 313 tests
+pytest                                              # 348 tests
 ```
 
 Rebuild the whole thing:

@@ -41,16 +41,23 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
 - **Retraction found while rebuilding 2b.** The −1.02 mg/L temp × discharge synergy was one station's 48 rows. Pooled over 138 it is +0.23 and the per-station sign flips (−0.93 to +1.72). Corrected in README, ML_METHODOLOGY, and here. Nothing depended on it — the API does not serve interactions.
 - **Scenario diagnosis sharpened.** "Physically wrong" was too strong: DO and discharge are negatively associated *within every station* (−0.14 to −0.60), so the model reproduces the record rather than inventing a sign. What is genuinely broken is that `/scenario_run` holds depth/velocity/width fixed while discharge moves — an impossible state — and that low flow is outside usable support (bias −2 mg/L, and "low flow" is largely one shallow station).
 - **Ablation reproduced exactly** against the documented ladder, plus one honest addition: adding air temperature (+0.073 R²) buys more than the whole HEC-RAS pipeline does (+0.027).
+- **Phase 3b.** 35 new tests (21 integration, 14 deployment invariants) and `scripts/verify_deployment.py`. Verification turned up three real defects, all fixed:
+  - `/explain` returned **0.0 for every feature** — the SHAP background was the request row itself, so baseline == prediction. Training background now ships beside each model; explainer built once (warm explain 2.4 s → 190 ms).
+  - `collinear_pairs` was in the schema and never populated — the route read a nonexistent attribute. Computed at training time now.
+  - `DATA_DIR` resolved into site-packages for an installed package, so the container would have ignored its `./data` mount and started degraded. Pinned in the Dockerfile; the override now propagates to the subdirectories.
+  - Also: compose mounted `./src` over a non-editable install, making the mount inert. `PYTHONPATH=/app/src`.
+- **Docker still unbuilt** (no daemon here). Verified by proxy: clean-venv `pip install ".[ml,api]"`, then served from the installed copy with no source on the path — degraded without `DATA_DIR`, 14/14 smoke checks with it.
+- **API_REFERENCE.md written** — was a placeholder since Phase 3.
 
 
 ### Next session — pick up here
 
-**State:** Phases 1, 2 (incl. all 5 notebooks), 3a done. 313 tests, lint clean, all pushed.
+**State:** Phases 1, 2, 3 done. 348 tests, lint clean, all pushed.
 
 **Next, in order of value:**
-1. Phase 3b — Docker verify (never tested, no Docker on this machine), integration tests.
-2. Phase 4 — React frontend.
-3. Optional, cheap: re-derive reach hydraulics from the sweep inside `/scenario_run` (see below).
+1. Phase 4 — React frontend.
+2. Cheap and worth it: re-derive reach hydraulics from the sweep inside `/scenario_run` (see below).
+3. When a machine with Docker is available: `docker compose up` then `python scripts/verify_deployment.py`. Everything else about the image is already tested.
 
 **Known debt:**
 - 4 cross-sections cut through constrictions (RS 12500/14000/18000/24000) — flagged by validator, not excluded.
@@ -59,6 +66,7 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
 - Scenario answers below ~2 m³/s should not be believed regardless of that fix — the model is biased −2 mg/L there and drought mechanisms (heat, residence time, concentrated load) are not in the feature set.
 - Model beats persistence by only 0.06 R² and loses on MAE; predicted range 3.3–10.1 mg/L against an observed 3.0–17.0, so it cannot flag hypoxic events.
 - HSI labels remain synthetic; only the falsification test constrains them.
+- The image has never been built. `tests/test_deployment.py` covers what a daemon is not needed for; the base image, Linux wheels, libgomp, the non-root user against a bind mount and the HEALTHCHECK loop are unverified.
 - The full debt register is also in `05_model_validation.ipynb` §7, so it travels with the analysis.
 
 **To rebuild anything:**
@@ -68,6 +76,7 @@ python scripts/build_geometry.py --river ayasegawa  # tiles -> HEC-RAS -> run
 python scripts/train_models.py                      # both models + manifest
 python scripts/make_figures.py                      # README figures
 uvicorn aquanexus.api.app:app --reload
+python scripts/verify_deployment.py                 # smoke-check a running API
 ```
 Raw data (9.5 GB tiles) is gitignored but already on disk at `data/raw/`.
 
@@ -673,53 +682,72 @@ Response time: ________ ms
 ---
 
 ### 3b. Integration & Deployment
-- [ ] Trained model loaded on startup
-- [ ] Feature preparation pipeline integrated
-- [ ] HEC-RAS scenario runner integrated
-- [ ] Error handling & logging
-- [ ] Middleware (CORS, request logging)
-- [ ] Dockerfile created
-- [ ] docker-compose.yml created
-- [ ] Environment configuration (.env)
-- [ ] Full API documentation (docs/API_REFERENCE.md)
+- [x] Trained model loaded on startup
+- [x] Feature preparation pipeline integrated
+- [x] HEC-RAS scenario runner integrated (sweep interpolation; see the caveat below)
+- [x] Error handling & logging
+- [x] Middleware (CORS, request logging)
+- [x] Dockerfile created
+- [x] docker-compose.yml created
+- [x] Environment configuration (.env)
+- [x] Full API documentation (docs/API_REFERENCE.md)
+- [x] Integration tests (21) + deployment invariant tests (14)
+- [x] `scripts/verify_deployment.py` — 14 smoke checks against a live service
+- [ ] `docker build` / `docker compose up` — **no Docker on this machine**
 
-**Date Started**: _______________  
-**Date Completed**: _______________  
+**Three defects found and fixed while verifying**
 
-**Integration Status**:
+1. **`/explain` returned zero for every feature.** The SHAP explainer was fitted
+   on the request row itself, so the prediction was measured against a
+   background of one identical point: baseline == prediction, all contributions
+   exactly 0.0. Well-formed, correctly summing, and empty. The training sample
+   now ships as `<target>_background.csv` and the explainer is built once per
+   model at first use. Warm explain latency 2.4 s → 190 ms as a side effect.
+2. **`collinear_pairs` was documented in the schema and never populated.** The
+   route read an attribute that did not exist and returned `[]` every time, so
+   the one caveat that keeps a caller from ranking ten collinear features was
+   silently absent. Computed at training time now, served with every explanation.
+3. **`DATA_DIR` resolved into site-packages for an installed package.** Settings
+   derive paths from the source file location, which in the image is
+   site-packages, not `/app` — so `-v ./data:/app/data` would have changed
+   nothing and the container would have started degraded with a correct-looking
+   mount. `DATA_DIR` is pinned in the Dockerfile and now propagates to the
+   subdirectories.
+
+Plus one that would have wasted somebody's afternoon: compose mounted `./src`
+over an image that installed the package non-editably, so the mount was inert
+and `--reload` restarted on edits that could not take effect. Fixed with
+`PYTHONPATH=/app/src`.
+
+**Integration Status** (Windows, Python 3.12, single worker)
 ```
-✓ Model loading: ____ ms
-✓ Explainer initialization: ____ ms
-✓ API startup time: ____ ms
-✓ Cold prediction latency: ____ ms
-✓ Warm prediction latency: ____ ms (cached model)
+Model loading (both models):        ~60 ms
+Explainer init (first /explain):    ~2.4 s, once per model, lazy
+Warm prediction latency:            ~3 ms
+Warm explanation latency:           ~190 ms (DO), ~220 ms (HSI)
+Batch of 100 states:                ~1 prediction's cost
 ```
 
-**Docker Build**:
+**Docker Build**: NOT RUN — Docker is not installed here. Verified instead:
+```
+pip install ".[ml,api]" into a clean venv     PASS  (the image's install step)
+serve from the installed copy, no src on path PASS  (mirrors the image layout)
+DATA_DIR unset -> degraded, /health explains  PASS  (mirrors a missing volume)
+DATA_DIR set   -> 14/14 smoke checks pass     PASS  (mirrors compose)
+tests/test_deployment.py                      14 tests on Dockerfile + compose
+```
+Still unverified without a daemon: the base image, apt/libgomp, Linux wheels,
+the non-root user against a bind-mounted volume, and the HEALTHCHECK loop.
+
+**Whoever has Docker runs:**
 ```bash
-docker build -t aquanexus:latest .
-Built successfully: ✓
-Image size: ________ MB
-```
-
-**Docker Compose Test**:
-```bash
-docker-compose up
-✓ API container running on http://localhost:8000
-✓ Swagger UI accessible on http://localhost:8000/docs
-✓ All endpoints responding
-```
-
-**API Health Check**:
-```bash
-curl http://localhost:8000/health
-Response: {"status": "ok", "service": "AquaNexus API"}
-Status: ✓ HEALTHY
+docker compose up -d
+python scripts/verify_deployment.py --url http://localhost:8000
 ```
 
 **Commit**:
 ```
-[Paste commit hash & message]
+Phase 3b: integration tests, deployment verification, three fixes
 ```
 
 **Phase 3 Summary**:

@@ -38,6 +38,7 @@ from aquanexus.data.dataset import (
 )
 from aquanexus.data.loader import filter_stations, load_many
 from aquanexus.logger import get_logger
+from aquanexus.ml.explainer import collinear_pairs
 from aquanexus.ml.models import HabitatPredictor, ModelConfig
 from aquanexus.ml.splits import grouped_split
 from aquanexus.ml.validator import ModelValidator
@@ -56,6 +57,36 @@ def training_ranges(dataset, features) -> dict:
         if len(column) and column.dtype.kind in "fiu":
             ranges[name] = [float(column.min()), float(column.max())]
     return ranges
+
+
+def save_background(dataset, features, target: str, limit: int = 100) -> str:
+    """Persist a sample of the training rows for SHAP to explain against.
+
+    Without this the API has no reference distribution and falls back to
+    explaining a request against itself, which returns a contribution of exactly
+    zero for every feature - an explanation that is not wrong so much as empty.
+    Saved next to the model so the two travel together.
+    """
+    rows = dataset[features].dropna(how="all")
+    if len(rows) > limit:
+        rows = rows.sample(limit, random_state=settings.RANDOM_SEED)
+
+    path = settings.MODELS_DIR / f"{target}_background.csv"
+    rows.to_csv(path, index=False)
+    log.info("background for %s: %d rows -> %s", target, len(rows), path.name)
+    return path.name
+
+
+def collinearity(dataset, features) -> list[list[str]]:
+    """Feature pairs that move together in training, for the API to disclose.
+
+    SHAP divides credit between collinear features arbitrarily, so a caller
+    reading per-feature contributions needs to know which of them are the same
+    signal wearing different names. Serving the explanation without this is
+    serving a ranking that cannot be ranked.
+    """
+    pairs = collinear_pairs(dataset, features)
+    return [[row.feature_a, row.feature_b] for row in pairs.itertuples()]
 
 
 CAVEATS = {
@@ -103,6 +134,8 @@ def train_dissolved_oxygen(observations, sweep):
         "metrics": {"rmse": best.rmse, "mae": best.mae, "r2": best.r2,
                     "validation": "grouped CV, each station held out"},
         "training_ranges": training_ranges(dataset, features),
+        "collinear_pairs": collinearity(dataset, features),
+        "background": save_background(dataset, features, "dissolved_oxygen"),
         "caveats": CAVEATS["dissolved_oxygen"],
     }
 
@@ -135,6 +168,8 @@ def train_hsi(observations, sweep):
         "metrics": {"rmse": metrics.rmse, "mae": metrics.mae, "r2": metrics.r2,
                     "validation": "grouped CV, observations held out"},
         "training_ranges": training_ranges(dataset, features),
+        "collinear_pairs": collinearity(dataset, features),
+        "background": save_background(dataset, features, "hsi"),
         "caveats": CAVEATS["hsi"],
     }
 

@@ -37,6 +37,34 @@ from aquanexus.logger import get_logger
 log = get_logger("ml.explainer")
 
 
+def collinear_pairs(frame: pd.DataFrame, features: list[str] | None = None,
+                    threshold: float = 0.9) -> pd.DataFrame:
+    """Feature pairs correlated beyond ``threshold``, strongest first.
+
+    Kept as a plain function so it can be computed at training time - the API
+    serves the pairs alongside every explanation, and a caller who cannot see
+    that depth, velocity and top width are near-duplicates will read their
+    separate SHAP contributions as three independent findings.
+    """
+    columns = [f for f in (features or frame.columns) if f in frame.columns]
+    correlations = frame[columns].corr(numeric_only=True)
+
+    pairs = []
+    names = list(correlations.columns)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            value = correlations.loc[a, b]
+            if pd.notna(value) and abs(value) >= threshold:
+                pairs.append({"feature_a": a, "feature_b": b,
+                              "correlation": float(value)})
+
+    if not pairs:
+        return pd.DataFrame(columns=["feature_a", "feature_b", "correlation"])
+    return (pd.DataFrame(pairs)
+            .sort_values("correlation", key=abs, ascending=False)
+            .reset_index(drop=True))
+
+
 @dataclass
 class Explanation:
     """SHAP attribution for a single prediction."""
@@ -173,21 +201,13 @@ class HabitatExplainer:
 
         Any pair listed here shares SHAP credit arbitrarily, so their individual
         importances should be read as one combined contribution.
+
+        The count depends on **which rows are explained**: a single station's
+        subset is not the whole record, and pairs move in and out of the list
+        with it. Explain the full training set before quoting a number.
         """
         self._require_values()
-        correlations = self._explained.corr(numeric_only=True)
-        pairs = []
-        names = list(correlations.columns)
-        for i, a in enumerate(names):
-            for b in names[i + 1:]:
-                value = correlations.loc[a, b]
-                if pd.notna(value) and abs(value) >= threshold:
-                    pairs.append({"feature_a": a, "feature_b": b,
-                                  "correlation": float(value)})
-        return (pd.DataFrame(pairs).sort_values("correlation", key=abs,
-                                                ascending=False)
-                .reset_index(drop=True) if pairs else pd.DataFrame(
-                    columns=["feature_a", "feature_b", "correlation"]))
+        return collinear_pairs(self._explained, threshold=threshold)
 
     # -- single prediction ---------------------------------------------------
 

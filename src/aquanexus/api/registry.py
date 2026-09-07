@@ -10,6 +10,7 @@ places would let them drift apart.
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -36,6 +37,18 @@ class LoadedModel:
     metrics: dict = field(default_factory=dict)
     caveats: list[str] = field(default_factory=list)
     training_ranges: dict[str, tuple[float, float]] = field(default_factory=dict)
+    #: Feature pairs correlated above 0.9 in training, disclosed with every
+    #: explanation. Empty for a manifest written before this was recorded.
+    collinear_pairs: list[list[str]] = field(default_factory=list)
+    #: Sample of the training rows, used as the SHAP reference distribution.
+    #: Without it an explanation compares a request against itself and every
+    #: contribution comes back as zero, so its absence disables /explain rather
+    #: than producing an empty-looking answer.
+    background: pd.DataFrame | None = None
+    #: Built on first use and kept: fitting a KernelExplainer means summarising
+    #: the background, which costs more than the explanation itself and does not
+    #: depend on the request.
+    explainer: object | None = field(default=None, repr=False)
 
 
 class ModelRegistry:
@@ -45,6 +58,10 @@ class ModelRegistry:
         self.models: dict[str, LoadedModel] = {}
         self.manifest: dict = {}
         self.error: str | None = None
+        # Sync routes run in a threadpool, so two requests can race to build the
+        # same explainer. Building it twice is wasteful rather than wrong, but
+        # the lock keeps startup cost predictable.
+        self._explainer_lock = threading.Lock()
 
     # -- loading ------------------------------------------------------------
 
@@ -81,6 +98,9 @@ class ModelRegistry:
                 caveats=list(meta.get("caveats", [])),
                 training_ranges={k: tuple(v) for k, v in
                                  meta.get("training_ranges", {}).items()},
+                collinear_pairs=[list(pair) for pair in
+                                 meta.get("collinear_pairs", [])],
+                background=self._load_background(models_dir, meta),
             )
             log.info("loaded %s (%s, %s labels)", name, meta.get("model_type"),
                      meta.get("labels"))
@@ -88,6 +108,49 @@ class ModelRegistry:
         if not self.models:
             self.error = "no models could be loaded"
         return self
+
+    def explainer_for(self, model: LoadedModel):
+        """The model's SHAP explainer, built once and reused.
+
+        Returns None when the model has no background sample, which is the
+        caller's cue to report explanations as unavailable rather than to
+        explain a request against itself.
+        """
+        if model.explainer is not None:
+            return model.explainer
+        if model.background is None:
+            return None
+
+        from aquanexus.ml.explainer import HabitatExplainer
+
+        with self._explainer_lock:
+            if model.explainer is None:  # another thread may have won the race
+                model.explainer = HabitatExplainer(model.predictor).fit_explainer(
+                    model.background, max_background=50
+                )
+                log.info("explainer ready for %s", model.name)
+        return model.explainer
+
+    @staticmethod
+    def _load_background(models_dir: Path, meta: dict) -> pd.DataFrame | None:
+        """Read the saved training sample, or None if it is not there.
+
+        A missing background is not fatal: predictions do not need it, and
+        /explain reports that explanations are unavailable rather than serving
+        zeros.
+        """
+        name = meta.get("background")
+        if not name:
+            return None
+        path = models_dir / name
+        if not path.is_file():
+            log.warning("background %s is missing; explanations disabled", name)
+            return None
+        try:
+            return pd.read_csv(path)
+        except Exception as exc:  # noqa: BLE001 - a bad background must not stop loading
+            log.warning("background %s could not be read: %s", name, exc)
+            return None
 
     def get(self, name: str) -> LoadedModel:
         if name not in self.models:

@@ -6,6 +6,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
+# The package is installed into site-packages, and the settings derive their
+# default paths from the source location - which in an installed layout is
+# site-packages, not /app. Without this the API looks for models beside its own
+# code and starts degraded however the data is mounted.
+ENV DATA_DIR=/app/data
+
 WORKDIR /app
 
 # libgomp is required by xgboost.

@@ -6,9 +6,17 @@ services:
     environment:
       API_DEBUG: "true"
       LOG_LEVEL: DEBUG
+      # The image installs the package into site-packages (a non-editable
+      # `pip install .`), so mounting ./src alone would change nothing: the
+      # import would still resolve to the copy baked into the image, and
+      # --reload would restart on edits that could not take effect. PYTHONPATH
+      # puts the mounted source ahead of site-packages so the mount is real.
+      PYTHONPATH: /app/src
     volumes:
       # Source is mounted for reload; data is mounted so the container reads
-      # the same HEC-RAS outputs and trained models the host produced.
+      # the same HEC-RAS outputs and trained models the host produced. Without
+      # the data mount the API starts degraded - no models are copied into the
+      # image, by design, since they are build outputs rather than source.
       - ./src:/app/src:ro
       - ./data:/app/data
     command: >

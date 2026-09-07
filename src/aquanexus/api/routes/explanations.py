@@ -40,10 +40,18 @@ def explain(request: PredictionRequest) -> ExplanationResponse:
         raise HTTPException(status_code=422, detail="state is empty")
 
     features = registry.build_features(state, model)
-    try:
-        from aquanexus.ml.explainer import HabitatExplainer
+    if model.background is None:
+        raise HTTPException(
+            status_code=503,
+            detail=f"no background sample for {request.target}; SHAP needs a "
+                   "reference distribution. Re-run scripts/train_models.py.",
+        )
 
-        explainer = HabitatExplainer(model.predictor).fit_explainer(features)
+    try:
+        # The background is the *training* sample, never the row being
+        # explained: explaining a request against itself makes every
+        # contribution exactly zero, which looks like an answer and is not one.
+        explainer = registry.explainer_for(model)
         explanation = explainer.explain_prediction(features, top=len(model.features))
     except Exception as exc:  # noqa: BLE001 - explanation may be unavailable
         raise HTTPException(status_code=503,
@@ -66,6 +74,6 @@ def explain(request: PredictionRequest) -> ExplanationResponse:
         prediction=explanation.prediction,
         baseline=explanation.expected_value,
         contributions=contributions,
-        collinear_pairs=[list(pair) for pair in getattr(model, "collinear_pairs", [])],
+        collinear_pairs=[list(pair) for pair in model.collinear_pairs],
         caveats=model.caveats,
     )

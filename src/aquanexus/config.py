@@ -8,7 +8,7 @@ than instantiating ``Settings`` yourself, so path resolution happens once.
 from pathlib import Path
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -73,6 +73,29 @@ class Settings(BaseSettings):
         if not 0.0 < v < 1.0:
             raise ValueError("split fractions must lie strictly between 0 and 1")
         return v
+
+    @model_validator(mode="after")
+    def _keep_data_paths_under_data_dir(self):
+        """Re-derive the data subdirectories whenever DATA_DIR is overridden.
+
+        ``ROOT_DIR`` is computed from this file's location, which is correct for
+        a checkout and wrong for an installed package: in a container the code
+        lives in site-packages while the data is mounted at /app/data. Setting
+        ``DATA_DIR`` must therefore move everything under it - the subdirectory
+        defaults were frozen against the *default* DATA_DIR when the class was
+        defined, so without this the override silently applies to DATA_DIR alone
+        and the API starts degraded, looking for models beside its own source.
+
+        Explicitly set subdirectories are left alone.
+        """
+        if "DATA_DIR" not in self.model_fields_set:
+            return self
+        for name, child in (("RAW_DIR", "raw"), ("PROCESSED_DIR", "processed"),
+                            ("MODELS_DIR", "models"), ("HECRAS_DIR", "hecras"),
+                            ("CACHE_DIR", "cache")):
+            if name not in self.model_fields_set:
+                object.__setattr__(self, name, self.DATA_DIR / child)
+        return self
 
     def ensure_dirs(self) -> None:
         """Create the data directories if they are missing.

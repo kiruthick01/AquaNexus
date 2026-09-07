@@ -85,12 +85,16 @@ def _contributions(model, features) -> dict[str, float] | None:
     """Per-feature SHAP contributions, or None if they cannot be produced.
 
     An explanation is a convenience, so a failure here must not cost the caller
-    their prediction.
+    their prediction. It is returned as None rather than as zeros when the
+    model has no saved background: SHAP measures a prediction against a
+    reference distribution, and explaining a request against itself returns
+    exactly zero for every feature - which reads as "nothing mattered".
     """
+    if model.background is None:
+        log.warning("%s has no background sample; explanation skipped", model.name)
+        return None
     try:
-        from aquanexus.ml.explainer import HabitatExplainer
-
-        explainer = HabitatExplainer(model.predictor).fit_explainer(features)
+        explainer = registry.explainer_for(model)
         explanation = explainer.explain_prediction(features)
         return {k: float(v) for k, v in explanation.contributions.items()}
     except Exception as exc:  # noqa: BLE001
