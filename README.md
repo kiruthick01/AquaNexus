@@ -305,15 +305,24 @@ Full reference: [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md).
 ![Predict page with a SHAP explanation](docs/figures/ui_predict.jpg)
 
 React + TypeScript, talking to the API above. The interesting constraint is that
-one of the two served models is trained on generated labels — so the interface has
-to make that impossible to miss:
+one of the two served models is trained on generated labels — so the interface is
+built around making that inseparable from the number:
 
-- the provenance badge sits in the same card as the number, never behind a disclosure;
-- the caveats the API returns are shown with the prediction, not summarised;
-- the **collinearity warning is rendered above the SHAP chart**, because the bar order
-  is not a ranking and a reader who sees the chart first has already concluded it is;
-- training ranges come from `/models` rather than being copied into the frontend, and
-  an input outside them is flagged rather than blocked — matching what the API does.
+- **every reading is drawn on a gauge staff**, against the range actually measured
+  on this river. A value near the edge of the evidence looks near the edge, and one
+  outside it is drawn outside the band rather than described as outside in a
+  sentence somebody may not read;
+- **caveats hang in the margin beside the reading**, on the rule that joins them to
+  it — annotations on a survey drawing, not a tinted box underneath;
+- the **collinearity warning sits above the SHAP chart**, because the bar order is
+  not a ranking and a reader who sees the chart first has already concluded it is;
+- the two models are not drawn as peers: the measured one is the sheet, the
+  generated one is set back;
+- ranges come from `/models`, never copied into the frontend, so they cannot drift
+  from the model. Input outside them is flagged, not blocked — matching the API.
+
+Monospace means "this is a measured quantity" and is never used for labels; the
+palette is the one `scripts/make_figures.py` draws the figures above with.
 
 ![Analyze page response surface](docs/figures/ui_analyze.jpg)
 

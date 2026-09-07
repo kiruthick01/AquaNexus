@@ -32,12 +32,18 @@ export default function App() {
         <div className="masthead-inner">
           <div className="masthead-top">
             <NavLink to="/" className="wordmark">
-              AquaNexus <span>· 綾瀬川</span>
+              <b>AquaNexus</b>
+              <span>綾瀬川 Ayase River, Saitama</span>
             </NavLink>
-            <span className="small" style={{ color: "#9fc3d8" }}>
+            <span
+              className={`station ${models.health?.status === "ok" ? "" : "down"}`}
+            >
+              <i aria-hidden="true" />
               {models.health
-                ? `API ${models.health.status} · v${models.health.version}`
-                : "connecting…"}
+                ? models.health.status === "ok"
+                  ? `${models.health.models_loaded.length} models loaded`
+                  : "running without models"
+                : "connecting to the API"}
             </span>
           </div>
           <nav className="nav">
@@ -100,10 +106,15 @@ export default function App() {
 
       <footer className="footer">
         <div className="footer-inner">
-          Data: 埼玉県 河川点群データ (CC BY 4.0) · 環境省 / 埼玉県
-          公共用水域水質測定 · 気象庁. Predictions are a proof of concept, not
-          regulatory advice — the habitat index is trained on synthetic labels and
-          the oxygen model is unreliable at low flow.
+          <p>
+            Channel geometry from 埼玉県 河川点群データ (CC BY 4.0). Water quality
+            from 環境省 and 埼玉県 公共用水域水質測定. Weather from 気象庁.
+          </p>
+          <p style={{ marginTop: "0.4rem" }}>
+            This is a proof of concept, not regulatory advice. The habitat index
+            is trained on labels this project generated, and the oxygen model is
+            unreliable below about 2 m³/s.
+          </p>
         </div>
       </footer>
     </div>

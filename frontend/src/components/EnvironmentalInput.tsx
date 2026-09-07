@@ -114,7 +114,9 @@ export default function EnvironmentalInput({ state, onChange, model, disabled }:
             <div className="field-head">
               <label htmlFor={inputId}>
                 {field.label}
-                {unused && <span className="muted small"> · not used by this model</span>}
+                {unused && (
+                  <span className="muted small"> (not used by this model)</span>
+                )}
               </label>
               <span className={`field-value ${outside ? "out" : ""}`}>
                 {value}

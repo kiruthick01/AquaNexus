@@ -179,6 +179,12 @@ class ModelInfo(BaseModel):
                     "these cannot show where the model's evidence ends, and "
                     "would have to hard-code them to try.",
     )
+    target_range: list[float] = Field(
+        default_factory=list,
+        description="Observed [min, max] of the predicted quantity itself, so a "
+                    "client can show a reading against the range actually "
+                    "measured on this river.",
+    )
 
 
 class HealthResponse(BaseModel):

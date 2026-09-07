@@ -93,6 +93,8 @@ export interface ModelInfo {
   caveats: string[];
   /** Observed [min, max] per feature, so a client can show where evidence ends. */
   training_ranges: Record<string, number[]>;
+  /** Observed [min, max] of the predicted quantity, for the gauge staff. */
+  target_range: number[];
 }
 
 export interface HealthResponse {

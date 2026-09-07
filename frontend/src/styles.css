@@ -1,28 +1,41 @@
 /*
- * Design tokens shared with the figures in docs/figures - the same ink, accent
- * and cool blue that scripts/make_figures.py draws with, so the dashboard and
- * the plots in the README read as one project.
+ * AquaNexus — a river survey instrument.
  *
- * Hand-written rather than a UI kit: the whole app is a dozen components, and a
- * framework would be more configuration than code.
+ * The organising idea is measurement against a datum, not a grid of cards. A
+ * reading is drawn where it falls inside the range actually measured on this
+ * river, so a value near the edge of the evidence looks near the edge. Caveats
+ * hang in the margin beside the number they qualify, the way annotations sit
+ * beside a section on a survey drawing — which is the one thing this interface
+ * cannot be allowed to separate.
+ *
+ * Deliberately absent: uniform rounded cards with a shadow under each,
+ * tracked-out uppercase labels, and monospace used for labels rather than for
+ * measurements. Mono here means "this is a measured quantity".
  */
 
 :root {
-  --ink: #1b2a41;
-  --ink-soft: #5a6472;
-  --accent: #c0392b;
-  --cool: #2e86ab;
-  --warm: #e67e22;
-  --synthetic: #b7791f;
-  --synthetic-bg: #fff8e6;
-  --observed: #1f7a4d;
-  --observed-bg: #eaf6ef;
-  --grid: #dfe3e8;
-  --surface: #ffffff;
-  --page: #f5f7f9;
-  --radius: 10px;
-  --shadow: 0 1px 2px rgba(27, 42, 65, 0.06), 0 4px 16px rgba(27, 42, 65, 0.06);
-  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  /* Drafting paper under fluorescent light, not warm cream. */
+  --paper: #eef2f3;
+  --sheet: #ffffff;
+  --ink: #0e2733;
+  --ink-2: #4a6470;
+  --ink-3: #8098a3;
+
+  /* Water blue and alarm red are shared with the figures in docs/figures, so
+     the app and the plots in the README read as one project. */
+  --gauge: #2e86ab;
+  --gauge-deep: #1d5f7d;
+  --flag: #c0392b;
+  --silt: #8a7a33;
+  --growth: #1f7a4d;
+
+  --rule: #cdd8dc;
+  --rule-strong: #a9bcc4;
+
+  --sans: "IBM Plex Sans", "IBM Plex Sans JP", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  --measure: 68ch;
 }
 
 * {
@@ -37,45 +50,61 @@ body,
 
 body {
   margin: 0;
-  background: var(--page);
+  background: var(--paper);
   color: var(--ink);
-  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN",
-    "Noto Sans JP", sans-serif;
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
 h1,
 h2,
 h3 {
-  line-height: 1.25;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.011em;
   margin: 0 0 0.4em;
 }
 
 h1 {
-  font-size: 1.6rem;
+  font-size: 1.75rem;
+  font-weight: 500;
 }
 h2 {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
 }
 h3 {
-  font-size: 0.95rem;
+  font-size: 0.92rem;
 }
 
 p {
-  margin: 0 0 0.9em;
+  margin: 0 0 0.85em;
+  max-width: var(--measure);
 }
 
 a {
-  color: var(--cool);
+  color: var(--gauge-deep);
+  text-underline-offset: 2px;
 }
 
-code,
+:focus-visible {
+  outline: 2px solid var(--gauge);
+  outline-offset: 2px;
+}
+
+/* Measured quantities are set in mono; labels never are. */
+.reading,
+.field-value,
+td.num,
+th.num,
+.stat-value,
 .mono {
   font-family: var(--mono);
-  font-size: 0.86em;
+  font-variant-numeric: tabular-nums;
 }
 
-/* -- layout ------------------------------------------------------------- */
+/* ---------------------------------------------------------------- shell -- */
 
 .app {
   display: flex;
@@ -85,13 +114,14 @@ code,
 
 .masthead {
   background: var(--ink);
-  color: #fff;
-  padding: 0.9rem 1.25rem 0;
+  color: #dfe9ed;
+  padding: 0.85rem 1.5rem 0;
 }
 
 .masthead-inner,
-.page {
-  max-width: 1120px;
+.page,
+.footer-inner {
+  max-width: 1180px;
   margin: 0 auto;
   width: 100%;
 }
@@ -99,160 +129,180 @@ code,
 .masthead-top {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.75rem;
+  align-items: flex-end;
   justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .wordmark {
-  font-size: 1.1rem;
-  font-weight: 650;
-  letter-spacing: 0.01em;
   color: #fff;
   text-decoration: none;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.wordmark b {
+  font-weight: 600;
+  font-size: 1.1rem;
+  letter-spacing: 0.005em;
 }
 
 .wordmark span {
-  color: #9fc3d8;
-  font-weight: 400;
+  color: #7fb4cc;
+  font-size: 0.95rem;
+}
+
+.station {
+  font-size: 0.82rem;
+  color: #7fb4cc;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.station i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--growth);
+  display: inline-block;
+}
+
+.station.down i {
+  background: var(--flag);
 }
 
 .nav {
   display: flex;
-  gap: 0.25rem;
-  margin-top: 0.75rem;
+  gap: 1.25rem;
+  margin-top: 0.7rem;
   overflow-x: auto;
 }
 
 .nav a {
-  color: #c8d6e0;
+  color: #a8c6d3;
   text-decoration: none;
-  padding: 0.45rem 0.7rem;
-  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 0.4rem 0 0.55rem;
   font-size: 0.9rem;
   white-space: nowrap;
+  border-bottom: 2px solid transparent;
 }
 
 .nav a:hover {
-  background: rgba(255, 255, 255, 0.08);
   color: #fff;
 }
 
 .nav a.active {
-  background: var(--page);
-  color: var(--ink);
-  font-weight: 600;
+  color: #fff;
+  border-bottom-color: var(--gauge);
 }
 
 .page {
-  padding: 1.25rem;
+  padding: 1.5rem;
   flex: 1;
 }
 
 .footer {
-  border-top: 1px solid var(--grid);
-  color: var(--ink-soft);
-  font-size: 0.82rem;
-  padding: 1rem 1.25rem 1.6rem;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-2);
+  font-size: 0.8rem;
+  padding: 1rem 1.5rem 1.75rem;
 }
 
-.footer-inner {
-  max-width: 1120px;
-  margin: 0 auto;
+.footer p {
+  max-width: 90ch;
+  margin: 0;
 }
 
-/* -- surfaces ----------------------------------------------------------- */
+/* --------------------------------------------------------------- sheets -- */
 
+/* Panels are sheets ruled at the top, not cards floating on a shadow. */
 .card {
-  background: var(--surface);
-  border: 1px solid var(--grid);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 1.1rem 1.2rem;
-  margin-bottom: 1rem;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-top: 2px solid var(--ink);
+  border-radius: 2px;
+  padding: 1rem 1.15rem 1.15rem;
+  margin-bottom: 1.1rem;
 }
 
 .card-title {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--rule);
 }
 
 .split {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: 1rem;
+  gap: 1.1rem;
   align-items: start;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 880px) {
   .split {
     grid-template-columns: 1fr;
   }
 }
 
 .muted {
-  color: var(--ink-soft);
+  color: var(--ink-2);
 }
 
 .small {
-  font-size: 0.85rem;
+  font-size: 0.84rem;
 }
 
-/* -- provenance --------------------------------------------------------- */
+/* ----------------------------------------------------------- provenance -- */
 
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  border-radius: 999px;
-  padding: 0.15rem 0.6rem;
-  font-size: 0.74rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 0.78rem;
+  font-weight: 500;
   white-space: nowrap;
+  padding: 0.1rem 0 0.1rem 0.5rem;
+  border-left: 3px solid var(--growth);
+  color: var(--growth);
 }
 
 .badge-synthetic {
-  background: var(--synthetic-bg);
-  color: var(--synthetic);
-  border: 1px solid #f0d9a0;
+  border-left-color: var(--silt);
+  color: var(--silt);
 }
 
-.badge-observed {
-  background: var(--observed-bg);
-  color: var(--observed);
-  border: 1px solid #b9e0ca;
-}
-
+/*
+ * Caveats are marginalia: hung beside the reading on a rule, not boxed under
+ * it. The rule is the join — it reads as part of the same object.
+ */
 .caveats {
-  border-left: 3px solid var(--warm);
-  background: #fdf6ee;
-  border-radius: 0 var(--radius) var(--radius) 0;
-  padding: 0.7rem 0.9rem;
-  margin-top: 0.9rem;
+  margin-top: 1rem;
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--rule-strong);
 }
 
 .caveats.synthetic {
-  border-left-color: var(--synthetic);
-  background: var(--synthetic-bg);
+  border-left-color: var(--silt);
 }
 
 .caveats h3 {
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--ink-soft);
-  margin-bottom: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  margin-bottom: 0.35rem;
 }
 
 .caveats ul {
   margin: 0;
-  padding-left: 1.1rem;
+  padding-left: 1rem;
   font-size: 0.85rem;
+  color: var(--ink-2);
 }
 
 .caveats li + li {
@@ -260,86 +310,147 @@ code,
 }
 
 .warning {
-  border-left: 3px solid var(--accent);
-  background: #fdeeec;
-  border-radius: 0 var(--radius) var(--radius) 0;
-  padding: 0.7rem 0.9rem;
+  margin-top: 1rem;
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--flag);
   font-size: 0.86rem;
-  margin-top: 0.9rem;
+}
+
+.warning ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1rem;
 }
 
 .banner {
-  border-radius: var(--radius);
-  padding: 0.7rem 0.9rem;
-  margin-bottom: 1rem;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--flag);
+  background: var(--sheet);
+  border-radius: 2px;
+  padding: 0.8rem 1rem;
+  margin-bottom: 1.1rem;
   font-size: 0.88rem;
-  border: 1px solid;
 }
 
-.banner-error {
-  background: #fdeeec;
-  border-color: #f0c3bd;
-  color: #8c2c20;
-}
+/* -------------------------------------------------------------- reading -- */
 
-.banner-warn {
-  background: var(--synthetic-bg);
-  border-color: #f0d9a0;
-  color: #7c5a12;
-}
-
-/* -- readouts ----------------------------------------------------------- */
-
-.readout {
+.reading {
   display: flex;
   align-items: baseline;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.2rem;
 }
 
-.readout-value {
-  font-size: 2.6rem;
-  font-weight: 700;
+.reading-value {
+  font-size: 3rem;
+  font-weight: 500;
   letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
-.readout-unit {
-  font-size: 1rem;
-  color: var(--ink-soft);
+.reading-unit {
+  font-size: 0.95rem;
+  color: var(--ink-2);
+  font-family: var(--sans);
 }
 
 .interpretation {
+  margin: 0.5rem 0 0;
   font-size: 0.95rem;
+}
+
+/*
+ * The gauge staff: the band is the range measured on this river, the needle is
+ * this reading. A value near the edge of the evidence looks near the edge.
+ */
+.gauge {
+  margin-top: 1.1rem;
+}
+
+.gauge-track {
+  position: relative;
+  height: 30px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.gauge-band {
+  position: absolute;
+  inset: 6px 0 0;
+  background: rgba(46, 134, 171, 0.1);
+  border-left: 1px solid var(--rule);
+  border-right: 1px solid var(--rule);
+}
+
+.gauge-needle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--gauge-deep);
+  transition: left 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.gauge-needle.out {
+  background: var(--flag);
+}
+
+.gauge-needle::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--gauge-deep);
+}
+
+.gauge-needle.out::after {
+  border-top-color: var(--flag);
+}
+
+.gauge-scale {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--ink-3);
+  padding-top: 0.3rem;
+}
+
+.gauge-caption {
+  font-size: 0.8rem;
+  color: var(--ink-2);
   margin-top: 0.35rem;
 }
 
-.stat-row {
+@media (prefers-reduced-motion: reduce) {
+  .gauge-needle {
+    transition: none;
+  }
+}
+
+.facts {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.4rem;
-  margin-top: 0.9rem;
-  padding-top: 0.9rem;
-  border-top: 1px solid var(--grid);
+  gap: 1.5rem;
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--rule);
 }
 
 .stat-label {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--ink-soft);
+  font-size: 0.78rem;
+  color: var(--ink-2);
 }
 
 .stat-value {
-  font-size: 1.05rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+  font-size: 1rem;
+  font-weight: 500;
 }
 
-/* -- forms -------------------------------------------------------------- */
+/* ---------------------------------------------------------------- forms -- */
 
 .field {
-  margin-bottom: 0.85rem;
+  margin-bottom: 0.8rem;
 }
 
 .field-head {
@@ -347,39 +458,35 @@ code,
   justify-content: space-between;
   align-items: baseline;
   gap: 0.5rem;
-  margin-bottom: 0.15rem;
 }
 
 .field label {
   font-size: 0.88rem;
-  font-weight: 500;
 }
 
 .field-value {
-  font-family: var(--mono);
   font-size: 0.85rem;
-  color: var(--ink-soft);
-  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
 }
 
 .field-value.out {
-  color: var(--accent);
-  font-weight: 600;
+  color: var(--flag);
 }
 
 input[type="range"] {
   width: 100%;
-  accent-color: var(--cool);
-  margin: 0;
+  accent-color: var(--gauge);
+  margin: 0.15rem 0 0;
 }
 
 input[type="number"],
+input[type="text"],
 select {
   font: inherit;
   padding: 0.35rem 0.5rem;
-  border: 1px solid var(--grid);
-  border-radius: 6px;
-  background: #fff;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  background: var(--sheet);
   color: var(--ink);
   width: 100%;
 }
@@ -387,16 +494,16 @@ select {
 .range-hint {
   display: flex;
   justify-content: space-between;
-  font-size: 0.72rem;
-  color: var(--ink-soft);
-  font-variant-numeric: tabular-nums;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--ink-3);
 }
 
 button {
   font: inherit;
-  font-weight: 600;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
+  font-size: 0.9rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 2px;
   border: 1px solid var(--ink);
   background: var(--ink);
   color: #fff;
@@ -404,22 +511,23 @@ button {
 }
 
 button:hover:not(:disabled) {
-  background: #26384f;
+  background: #16394a;
 }
 
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 button.secondary {
-  background: #fff;
+  background: var(--sheet);
   color: var(--ink);
-  border-color: var(--grid);
+  border-color: var(--rule-strong);
 }
 
 button.secondary:hover:not(:disabled) {
-  background: #eef2f5;
+  border-color: var(--ink);
+  background: var(--sheet);
 }
 
 .button-row {
@@ -427,59 +535,55 @@ button.secondary:hover:not(:disabled) {
   gap: 0.5rem;
   flex-wrap: wrap;
   align-items: center;
+  margin-top: 1rem;
 }
 
 .segmented {
   display: inline-flex;
-  border: 1px solid var(--grid);
-  border-radius: 8px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
   overflow: hidden;
-  background: #fff;
 }
 
 .segmented button {
   border: 0;
   border-radius: 0;
-  background: #fff;
-  color: var(--ink-soft);
-  font-weight: 500;
-  padding: 0.4rem 0.85rem;
+  background: var(--sheet);
+  color: var(--ink-2);
+  padding: 0.35rem 0.8rem;
 }
 
 .segmented button[aria-pressed="true"] {
   background: var(--ink);
   color: #fff;
-  font-weight: 600;
 }
 
-/* -- tables and charts --------------------------------------------------- */
+/* --------------------------------------------------------------- tables -- */
 
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.87rem;
+  font-size: 0.86rem;
 }
 
 th,
 td {
   text-align: left;
-  padding: 0.4rem 0.5rem;
-  border-bottom: 1px solid var(--grid);
+  padding: 0.35rem 0.5rem 0.35rem 0;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
 }
 
 th {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-soft);
-  font-weight: 600;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  white-space: nowrap;
 }
 
 td.num,
 th.num {
   text-align: right;
-  font-variant-numeric: tabular-nums;
-  font-family: var(--mono);
 }
 
 .scroll-x {
@@ -490,39 +594,71 @@ figure {
   margin: 0;
 }
 
+figcaption,
+.gauge-caption {
+  max-width: var(--measure);
+}
+
 figcaption {
   font-size: 0.8rem;
-  color: var(--ink-soft);
+  color: var(--ink-2);
   margin-top: 0.5rem;
 }
 
 .legend {
   display: flex;
-  gap: 1rem;
+  gap: 1.1rem;
   flex-wrap: wrap;
   font-size: 0.78rem;
-  color: var(--ink-soft);
+  color: var(--ink-2);
   margin-top: 0.5rem;
 }
 
 .swatch {
   display: inline-block;
-  width: 0.75rem;
-  height: 0.75rem;
-  border-radius: 2px;
+  width: 0.7rem;
+  height: 0.7rem;
   margin-right: 0.3rem;
   vertical-align: -1px;
 }
 
 .spinner {
-  color: var(--ink-soft);
+  color: var(--ink-2);
   font-size: 0.88rem;
 }
 
 .prose {
-  max-width: 68ch;
+  max-width: var(--measure);
 }
 
 .prose li {
   margin-bottom: 0.35rem;
+}
+
+/* ------------------------------------------------------------- overview -- */
+
+/*
+ * The two models are not peers, so they are not two identical cards. The
+ * measured one is the sheet; the generated one is set back — same information,
+ * visibly lesser standing.
+ */
+.model-sheet {
+  border-top-color: var(--gauge);
+}
+
+.model-sheet.synthetic {
+  border-top-color: var(--silt);
+  background: #fbfaf6;
+}
+
+/* Collinear pairs read as a list of facts, not one dot-joined string. */
+.pair {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  color: var(--ink-2);
+  background: rgba(46, 134, 171, 0.07);
+  border-radius: 2px;
+  padding: 0.05rem 0.35rem;
+  margin: 0.15rem 0.3rem 0 0;
 }

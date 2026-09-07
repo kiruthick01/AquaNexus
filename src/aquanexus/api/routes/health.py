@@ -43,6 +43,7 @@ def list_models() -> list[ModelInfo]:
             n_train=m.n_train, features=m.features,
             metrics=dict(m.metrics), caveats=m.caveats,
             training_ranges={k: list(v) for k, v in m.training_ranges.items()},
+            target_range=list(m.target_range),
         )
         for name, m in sorted(registry.models.items())
     ]

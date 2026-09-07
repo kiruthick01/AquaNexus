@@ -1,12 +1,18 @@
 /**
- * The prediction readout.
+ * The reading, drawn as a gauge staff.
  *
- * Layout order is deliberate: provenance badge, then the number, then the
- * interpretation, then anything flagged out of range, then the caveats. A
- * screenshot cropped to the number alone should still carry the badge.
+ * A number alone says nothing about whether it is high or low for this river.
+ * The band is the range actually measured on the Ayase; the needle is this
+ * prediction. A value near the edge of the evidence looks near the edge, and a
+ * value outside it is drawn outside the band rather than described as outside
+ * in a sentence somebody may not read.
+ *
+ * Order is deliberate: provenance, then the number, then where it sits, then
+ * what it means, then anything flagged, then the caveats hung beside it. A
+ * screenshot cropped to the number still carries its provenance.
  */
 
-import type { PredictionResponse } from "../types";
+import type { ModelInfo, PredictionResponse } from "../types";
 import { CaveatList, ProvenanceBadge } from "./Provenance";
 
 const TARGET_NAMES: Record<string, string> = {
@@ -14,8 +20,55 @@ const TARGET_NAMES: Record<string, string> = {
   hsi: "Habitat suitability",
 };
 
-export default function PredictionCard({ result }: { result: PredictionResponse }) {
+export function GaugeStaff({
+  value,
+  range,
+  unit,
+  digits,
+}: {
+  value: number;
+  range: [number, number];
+  unit: string;
+  digits: number;
+}) {
+  const [low, high] = range;
+  const span = high - low || 1;
+  const fraction = (value - low) / span;
+  const outside = value < low || value > high;
+  const position = Math.min(1, Math.max(0, fraction));
+
+  return (
+    <div className="gauge">
+      <div className="gauge-track">
+        <div className="gauge-band" />
+        <div
+          className={`gauge-needle ${outside ? "out" : ""}`}
+          style={{ left: `${position * 100}%` }}
+        />
+      </div>
+      <div className="gauge-scale">
+        <span>{low.toFixed(digits)}</span>
+        <span>{high.toFixed(digits)}</span>
+      </div>
+      <p className="gauge-caption">
+        {outside
+          ? `Outside everything measured here — the record runs ${low.toFixed(digits)} to ${high.toFixed(digits)} ${unit}.`
+          : `Measured range on this river: ${low.toFixed(digits)}–${high.toFixed(digits)} ${unit}.`}
+      </p>
+    </div>
+  );
+}
+
+export default function PredictionCard({
+  result,
+  model,
+}: {
+  result: PredictionResponse;
+  model?: ModelInfo;
+}) {
   const digits = result.target === "hsi" ? 3 : 2;
+  const range = model?.target_range;
+  const hasRange = range !== undefined && range.length === 2;
 
   return (
     <section className="card" aria-label="Prediction">
@@ -24,18 +77,31 @@ export default function PredictionCard({ result }: { result: PredictionResponse 
         <ProvenanceBadge labels={result.labels} />
       </div>
 
-      <div className="readout">
-        <span className="readout-value">{result.prediction.toFixed(digits)}</span>
-        <span className="readout-unit">{result.unit}</span>
+      <div className="reading">
+        <span className="reading-value">{result.prediction.toFixed(digits)}</span>
+        <span className="reading-unit">{result.unit}</span>
       </div>
+
+      {hasRange && (
+        <GaugeStaff
+          value={result.prediction}
+          range={[range[0], range[1]]}
+          unit={result.unit}
+          digits={digits}
+        />
+      )}
+
       <p className="interpretation">{result.interpretation}</p>
 
-      <div className="stat-row">
+      <div className="facts">
         <div>
           <div className="stat-label">Uncertainty</div>
           <div className="stat-value">
             {result.uncertainty === null ? (
-              <span className="muted" title="This model cannot express a spread; a constant would be invented">
+              <span
+                className="muted"
+                title="This model cannot express a spread, and a constant would be invented"
+              >
                 not available
               </span>
             ) : (
@@ -53,13 +119,13 @@ export default function PredictionCard({ result }: { result: PredictionResponse 
 
       {result.out_of_range.length > 0 && (
         <div className="warning" role="status">
-          <strong>Outside the training range.</strong> The model has never seen
-          these conditions, and the answer above is extrapolation:
+          <strong>Outside the training range.</strong> The model has not seen
+          these conditions, so the reading above is extrapolation:
           <ul>
             {result.out_of_range.map((warning) => (
               <li key={warning.feature}>
-                <code>{warning.feature}</code> = {warning.value} · trained on{" "}
-                {warning.training_min}–{warning.training_max}
+                <span className="mono">{warning.feature}</span> {warning.value} ·
+                measured {warning.training_min}–{warning.training_max}
               </li>
             ))}
           </ul>

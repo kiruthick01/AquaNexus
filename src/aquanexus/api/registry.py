@@ -49,6 +49,8 @@ class LoadedModel:
     #: Feature pairs correlated above 0.9 in training, disclosed with every
     #: explanation. Empty for a manifest written before this was recorded.
     collinear_pairs: list[list[str]] = field(default_factory=list)
+    #: Observed [min, max] of the label, for showing a reading in context.
+    target_range: list[float] = field(default_factory=list)
     #: Sample of the training rows, used as the SHAP reference distribution.
     #: Without it an explanation compares a request against itself and every
     #: contribution comes back as zero, so its absence disables /explain rather
@@ -109,6 +111,7 @@ class ModelRegistry:
                                  meta.get("training_ranges", {}).items()},
                 collinear_pairs=[list(pair) for pair in
                                  meta.get("collinear_pairs", [])],
+                target_range=[float(v) for v in meta.get("target_range", [])],
                 background=self._load_background(models_dir, meta),
             )
             log.info("loaded %s (%s, %s labels)", name, meta.get("model_type"),

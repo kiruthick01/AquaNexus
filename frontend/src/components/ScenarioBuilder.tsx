@@ -127,7 +127,7 @@ export default function ScenarioBuilder({ baseline, onRun, busy }: Props) {
             style={{
               font: "inherit",
               padding: "0.35rem 0.5rem",
-              border: "1px solid var(--grid)",
+              border: "1px solid var(--rule)",
               borderRadius: "6px",
               flex: "1 1 10rem",
             }}
@@ -160,7 +160,7 @@ function ScenarioResult({ result }: { result: ScenarioResponse }) {
         <ProvenanceBadge labels={result.labels} />
       </div>
 
-      <div className="stat-row" style={{ borderTop: 0, marginTop: 0, paddingTop: 0 }}>
+      <div className="facts" style={{ borderTop: 0, marginTop: 0, paddingTop: 0 }}>
         <div>
           <div className="stat-label">Baseline</div>
           <div className="stat-value">
@@ -177,7 +177,7 @@ function ScenarioResult({ result }: { result: ScenarioResponse }) {
           <div className="stat-label">Change</div>
           <div
             className="stat-value"
-            style={{ color: better ? "var(--observed)" : "var(--accent)" }}
+            style={{ color: better ? "var(--growth)" : "var(--flag)" }}
           >
             {result.change > 0 ? "+" : ""}
             {result.change.toFixed(digits)} {result.unit}

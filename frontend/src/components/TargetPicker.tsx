@@ -45,12 +45,14 @@ export default function TargetPicker({
       </div>
       {selected && (
         <p className="small muted" style={{ marginTop: "0.5rem" }}>
-          {selected.model_type} · trained on {selected.n_train.toLocaleString()}{" "}
+          A {selected.model_type} model trained on{" "}
+          {selected.n_train.toLocaleString()}{" "}
           {selected.labels === "SYNTHETIC" ? "generated" : "measured"} rows
           {typeof selected.metrics.r2 === "number" &&
-            ` · R² ${(selected.metrics.r2 as number).toFixed(2)}`}
-          {selected.labels === "SYNTHETIC" &&
-            " — a score that measures recovery of a function this project wrote"}
+            `, scoring R² ${(selected.metrics.r2 as number).toFixed(2)}`}
+          {selected.labels === "SYNTHETIC"
+            ? " — a score that measures recovery of a function this project wrote, not ecological skill."
+            : "."}
         </p>
       )}
     </div>

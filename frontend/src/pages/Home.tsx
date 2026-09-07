@@ -17,12 +17,13 @@ export default function Home({ models }: { models: ModelState }) {
 
   return (
     <>
-      <h1>AquaNexus</h1>
+      <h1>Two models answer here. Only one of them is measuring the river.</h1>
       <p className="prose">
-        Physics-informed habitat and water-quality prediction for the{" "}
-        <strong>{river}</strong>, Saitama. Channel geometry from open bathymetric
-        point clouds, hydraulics from HEC-RAS, and two models trained on what came
-        out — one on real measurements, one on labels this project generated.
+        {river} runs through Saitama, and spent years ranked as Japan’s most
+        polluted river before a documented recovery. This reads its channel
+        geometry from open bathymetric point clouds, its hydraulics from HEC-RAS,
+        and predicts from what came out — with the standing of every number
+        attached to it.
       </p>
 
       <div className="split">
@@ -64,7 +65,7 @@ function ModelSummary({ model }: { model: ModelInfo }) {
   const synthetic = model.labels === "SYNTHETIC";
 
   return (
-    <section className="card">
+    <section className={`card model-sheet ${synthetic ? "synthetic" : ""}`}>
       <div className="card-title">
         <h2>{model.target === "hsi" ? "Habitat index" : "Dissolved oxygen"}</h2>
         <ProvenanceBadge labels={model.labels} />
@@ -76,7 +77,7 @@ function ModelSummary({ model }: { model: ModelInfo }) {
           : "Labels are real measurements from the public-waters monitoring record. This is the model worth believing, and it is a modest result: it beats “same as last month” by 0.06 R² and loses to it on median error."}
       </p>
 
-      <div className="stat-row">
+      <div className="facts">
         {r2 !== null && (
           <div>
             <div className="stat-label">R²</div>

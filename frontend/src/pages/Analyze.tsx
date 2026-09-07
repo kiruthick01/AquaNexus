@@ -112,6 +112,13 @@ export default function Analyze({ models }: { models: ModelState }) {
   );
 }
 
+const METRIC_NAMES: Record<string, string> = {
+  rmse: "RMSE",
+  mae: "MAE",
+  r2: "R²",
+  validation: "Validated by",
+};
+
 function ModelCard({ model }: { model: ModelInfo }) {
   const metrics = Object.entries(model.metrics);
 
@@ -139,7 +146,7 @@ function ModelCard({ model }: { model: ModelInfo }) {
             </tr>
             {metrics.map(([name, value]) => (
               <tr key={name}>
-                <th scope="row">{name}</th>
+                <th scope="row">{METRIC_NAMES[name] ?? name}</th>
                 <td className={typeof value === "number" ? "num" : ""}>
                   {typeof value === "number" ? value.toFixed(3) : value}
                 </td>

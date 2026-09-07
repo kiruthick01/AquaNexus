@@ -35,8 +35,8 @@ export default function ExplainabilityPanel({
       <div className="card-title">
         <h2>Why this number</h2>
         <span className="small muted">
-          baseline {explanation.baseline.toFixed(2)} → prediction{" "}
-          {explanation.prediction.toFixed(2)}
+          {explanation.baseline.toFixed(2)} baseline, {explanation.prediction.toFixed(2)}{" "}
+          here
         </span>
       </div>
 
@@ -49,9 +49,11 @@ export default function ExplainabilityPanel({
           features arbitrarily, so read them as one combined effect rather than a
           ranking. Marked <span aria-hidden="true">◈</span> below.
           <div className="small muted" style={{ marginTop: "0.4rem" }}>
-            {explanation.collinear_pairs
-              .map((pair) => pair.join(" ↔ "))
-              .join(" · ")}
+            {explanation.collinear_pairs.map((pair) => (
+              <span key={pair.join()} className="pair">
+                {pair.join(" with ")}
+              </span>
+            ))}
           </div>
         </div>
       )}
@@ -72,7 +74,7 @@ export default function ExplainabilityPanel({
               y1={4}
               x2={midpoint}
               y2={height - 20}
-              stroke="var(--grid)"
+              stroke="var(--rule)"
             />
             {rows.map((row, index) => {
               const y = index * ROW_HEIGHT + 6;
@@ -96,14 +98,14 @@ export default function ExplainabilityPanel({
                     width={width}
                     height={ROW_HEIGHT - 12}
                     rx="2"
-                    fill={positive ? "var(--cool)" : "var(--accent)"}
+                    fill={positive ? "var(--gauge)" : "var(--flag)"}
                   />
                   <text
                     x={positive ? midpoint + width + 5 : midpoint - width - 5}
                     y={y + 13}
                     textAnchor={positive ? "start" : "end"}
                     fontSize="10.5"
-                    fill="var(--ink-soft)"
+                    fill="var(--ink-2)"
                   >
                     {row.contribution > 0 ? "+" : ""}
                     {row.contribution.toFixed(2)}
@@ -116,18 +118,18 @@ export default function ExplainabilityPanel({
               y={height - 6}
               textAnchor="middle"
               fontSize="10"
-              fill="var(--ink-soft)"
+              fill="var(--ink-2)"
             >
               contribution to the prediction{unit}
             </text>
           </svg>
           <div className="legend">
             <span>
-              <i className="swatch" style={{ background: "var(--cool)" }} />
+              <i className="swatch" style={{ background: "var(--gauge)" }} />
               raises the prediction
             </span>
             <span>
-              <i className="swatch" style={{ background: "var(--accent)" }} />
+              <i className="swatch" style={{ background: "var(--flag)" }} />
               lowers it
             </span>
             <span>◈ shares credit with a correlated feature</span>

@@ -134,7 +134,7 @@ export default function InteractionHeatmap({
               y={PAD_TOP + (yValues.length - 1 - row) * CELL + CELL / 2}
               textAnchor="end"
               fontSize="10.5"
-              fill="var(--ink-soft)"
+              fill="var(--ink-2)"
             >
               {temperature.toFixed(0)}°
             </text>
@@ -146,7 +146,7 @@ export default function InteractionHeatmap({
               y={height - PAD_BOTTOM + 22}
               textAnchor="middle"
               fontSize="10.5"
-              fill="var(--ink-soft)"
+              fill="var(--ink-2)"
             >
               {discharge < 10 ? discharge.toFixed(1) : discharge.toFixed(0)}
             </text>
@@ -183,7 +183,7 @@ export default function InteractionHeatmap({
           {high.toFixed(digits)} {grid.unit}
         </span>
         {grid.outOfRangeCount > 0 && (
-          <span style={{ color: "var(--accent)" }}>
+          <span style={{ color: "var(--flag)" }}>
             {grid.outOfRangeCount} of {predictions.length} cells fall outside the
             training range
           </span>

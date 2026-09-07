@@ -104,12 +104,12 @@ export default function Predict({ models }: { models: ModelState }) {
 
         <div>
           {result ? (
-            <PredictionCard result={result} />
+            <PredictionCard result={result} model={models.byTarget(target)} />
           ) : (
             <section className="card">
               <p className="muted" style={{ margin: 0 }}>
-                No prediction yet. The defaults describe a warm July day on the
-                Ayase: 24.5 °C, 12 m³/s.
+                The state on the left is a warm July day on the Ayase — 24.5 °C
+                at 12 m³/s. Change it, then ask a model what it makes of it.
               </p>
             </section>
           )}

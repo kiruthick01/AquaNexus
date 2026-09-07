@@ -77,6 +77,18 @@ def save_background(dataset, features, target: str, limit: int = 100) -> str:
     return path.name
 
 
+def target_range(dataset, target: str) -> list[float]:
+    """Observed [min, max] of the label.
+
+    `training_ranges` covers the features; this covers the thing being
+    predicted. A client showing a reading has no way to say whether 5.8 mg/L is
+    high or low for this river without it - and hard-coding the range in the UI
+    would put it out of step with the next retrain.
+    """
+    column = dataset[target].dropna()
+    return [float(column.min()), float(column.max())]
+
+
 def collinearity(dataset, features) -> list[list[str]]:
     """Feature pairs that move together in training, for the API to disclose.
 
@@ -135,6 +147,7 @@ def train_dissolved_oxygen(observations, sweep):
                     "validation": "grouped CV, each station held out"},
         "training_ranges": training_ranges(dataset, features),
         "collinear_pairs": collinearity(dataset, features),
+        "target_range": target_range(dataset, "dissolved_oxygen"),
         "background": save_background(dataset, features, "dissolved_oxygen"),
         "caveats": CAVEATS["dissolved_oxygen"],
     }
@@ -169,6 +182,7 @@ def train_hsi(observations, sweep):
                     "validation": "grouped CV, observations held out"},
         "training_ranges": training_ranges(dataset, features),
         "collinear_pairs": collinearity(dataset, features),
+        "target_range": target_range(dataset, "hsi"),
         "background": save_background(dataset, features, "hsi"),
         "caveats": CAVEATS["hsi"],
     }

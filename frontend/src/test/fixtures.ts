@@ -50,6 +50,7 @@ export const oxygenModel: ModelInfo = {
     discharge: [0.17, 73.71],
     reach_depth: [2.13, 4.89],
   },
+  target_range: [3.0, 17.0],
 };
 
 export const hsiModel: ModelInfo = {
@@ -64,6 +65,7 @@ export const hsiModel: ModelInfo = {
     "SYNTHETIC LABELS. HSI is generated from ecological response curves in this repository, not measured in the field.",
   ],
   training_ranges: { water_temp: [5.1, 32.5], depth: [0.1, 5.6] },
+  target_range: [0.0, 0.989],
 };
 
 export const prediction: PredictionResponse = {
