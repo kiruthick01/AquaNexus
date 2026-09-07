@@ -9,7 +9,8 @@ model, a trained predictor, and an explainable API — built end to end on the
 <p align="left">
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?logo=python&logoColor=white">
   <img alt="HEC-RAS 7.0" src="https://img.shields.io/badge/HEC--RAS-7.0-1f6feb">
-  <img alt="tests" src="https://img.shields.io/badge/tests-348%20passing-2ea043">
+  <img alt="React 19 + TypeScript" src="https://img.shields.io/badge/React%2019-TypeScript-61dafb?logo=react&logoColor=white">
+  <img alt="tests" src="https://img.shields.io/badge/tests-355%20backend%20%2B%2022%20frontend-2ea043">
   <img alt="ruff" src="https://img.shields.io/badge/lint-ruff%20clean-2ea043">
   <img alt="licence" src="https://img.shields.io/badge/licence-MIT-6e7781">
   <img alt="data" src="https://img.shields.io/badge/data-CC%20BY%204.0%20%E5%9F%BC%E7%8E%89%E7%9C%8C-e67e22">
@@ -297,6 +298,37 @@ Design decisions worth noting:
 
 Full reference: [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md).
 
+---
+
+## Dashboard
+
+![Predict page with a SHAP explanation](docs/figures/ui_predict.jpg)
+
+React + TypeScript, talking to the API above. The interesting constraint is that
+one of the two served models is trained on generated labels — so the interface has
+to make that impossible to miss:
+
+- the provenance badge sits in the same card as the number, never behind a disclosure;
+- the caveats the API returns are shown with the prediction, not summarised;
+- the **collinearity warning is rendered above the SHAP chart**, because the bar order
+  is not a ranking and a reader who sees the chart first has already concluded it is;
+- training ranges come from `/models` rather than being copied into the frontend, and
+  an input outside them is flagged rather than blocked — matching what the API does.
+
+![Analyze page response surface](docs/figures/ui_analyze.jpg)
+
+The response surface is 81 real model calls in one `/batch_predict`, swept across the
+training range. It shows oxygen falling with both temperature and discharge — and says
+plainly that most of that plane is a state the river never produces, since discharge
+and velocity are coupled through the hydraulic model and only one of them moves here.
+
+```bash
+cd frontend && npm install && npm run dev   # http://localhost:3000
+```
+
+`src/test/provenance.test.tsx` exists to stop a refactor quietly dropping any of
+those properties. See [`frontend/README.md`](frontend/README.md).
+
 > **Container status:** the image has never been built — Docker is not installed on
 > the development machine. Everything checkable without a daemon is covered by
 > `tests/test_deployment.py`, and the install step was verified by installing the
@@ -315,7 +347,7 @@ python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\act
 pip install -e ".[ml,api,dev]"                      # add ",geo" for point clouds
 cp .env.example .env
 
-pytest                                              # 348 tests
+pytest                                              # 355 tests
 ```
 
 Rebuild the whole thing:
@@ -326,6 +358,8 @@ python scripts/build_geometry.py --river ayasegawa  # tiles → HEC-RAS → run
 python scripts/train_models.py                      # both models + manifest
 python scripts/make_figures.py                      # the figures above
 uvicorn aquanexus.api.app:app --reload
+
+cd frontend && npm install && npm run dev           # dashboard on :3000
 ```
 
 > HEC-RAS 7.x on Windows is required to *generate* hydraulics, not to run the API.
@@ -390,7 +424,9 @@ Stated here rather than discovered later:
 | [`docs/HECRAS_GUIDE.md`](docs/HECRAS_GUIDE.md) | File-format rules that fail silently |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module boundaries and design decisions |
 | [`DEVLOG.md`](DEVLOG.md) | Short daily progress notes |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Running it, container notes, and what is still unverified |
 | [`notebooks/`](notebooks/) | Point-cloud→hydraulics walkthrough, data exploration, training, SHAP, validation |
+| [`frontend/README.md`](frontend/README.md) | Dashboard structure and the constraints it has to honour |
 
 ---
 

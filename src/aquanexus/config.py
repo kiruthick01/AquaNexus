@@ -61,7 +61,13 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     API_DEBUG: bool = False
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    # Both spellings of the dev origins: a browser treats http://127.0.0.1:3000
+    # and http://localhost:3000 as different origins, and a request from the
+    # unlisted one fails as an unexplained "cannot reach the API".
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000", "http://127.0.0.1:3000",
+        "http://localhost:5173", "http://127.0.0.1:5173",
+    ]
 
     # --- Logging ---
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

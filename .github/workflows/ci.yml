@@ -1,0 +1,106 @@
+# CI: lint and test both halves of the project.
+#
+# The trained models are gitignored - they are build outputs, and the raw data
+# they need is 9.5 GB of point cloud. The backend suite is written to skip the
+# tests that need artefacts rather than fail without them, so CI exercises
+# everything else and reports honestly how much it covered.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: Backend (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        # No geo or hecras extras: GDAL is heavy and HEC-RAS is Windows-only.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[ml,api,dev]"
+
+      - name: Lint
+        run: ruff check src tests scripts
+
+      - name: Test
+        run: pytest -q
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck and build
+        run: npm run build
+
+      - name: Test
+        run: npm run test
+
+  containers:
+    name: Container builds
+    runs-on: ubuntu-latest
+    # Docker is not installed on the development machine, so this job is the
+    # first place the images are actually built. It is the check that the
+    # invariants in tests/test_deployment.py cannot make on their own.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the API image
+        run: docker build -t aquanexus-api:ci .
+
+      - name: Build the frontend image
+        run: docker build -t aquanexus-frontend:ci ./frontend
+
+      - name: Start the API and check it answers
+        run: |
+          docker run -d --name api -p 8000:8000 \
+            -v "${{ github.workspace }}/data:/app/data" aquanexus-api:ci
+          for attempt in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health > /dev/null; then break; fi
+            sleep 2
+          done
+          curl -sf http://localhost:8000/health
+
+      - name: Smoke-check the running service
+        # Without trained models the API starts degraded, which the script
+        # reports as a failure. That is correct: CI has no artefacts, so only
+        # the reachability half can pass here, and the run records which.
+        continue-on-error: true
+        run: |
+          python -m pip install httpx
+          python scripts/verify_deployment.py --url http://localhost:8000
+
+      - name: API logs
+        if: always()
+        run: docker logs api || true

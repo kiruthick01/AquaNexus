@@ -22,6 +22,15 @@ from aquanexus.logger import get_logger
 
 log = get_logger("api.registry")
 
+#: Caller fields that stand in for a model feature. A grab sample describes one
+#: point; the model was trained on reach means, and treating the point as the
+#: reach is the assumption `build_features` makes.
+FEATURE_ALIASES: dict[str, tuple[str, ...]] = {
+    "reach_depth": ("depth",),
+    "reach_velocity": ("velocity",),
+    "reach_froude": ("froude_number",),
+}
+
 
 @dataclass
 class LoadedModel:
@@ -207,10 +216,19 @@ class ModelRegistry:
 
         Reported, not rejected. A model asked about conditions it has never seen
         should answer and say so, rather than refuse or pretend.
+
+        Aliases are followed because :meth:`build_features` follows them: a
+        caller's point ``depth`` becomes the model's ``reach_depth``. Checking
+        only the literal name let an aliased value through unflagged - the model
+        was fed a depth outside anything it had seen and the response said the
+        state was fine.
         """
         warnings = []
         for name, (low, high) in model.training_ranges.items():
             value = state.get(name)
+            if value is None:
+                value = next((state[source] for source in FEATURE_ALIASES.get(name, ())
+                              if state.get(source) is not None), None)
             if value is None or not np.isfinite(value):
                 continue
             if value < low or value > high:

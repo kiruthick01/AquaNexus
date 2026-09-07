@@ -37,13 +37,19 @@ def compose() -> str:
 
 
 def copied_sources(dockerfile: str) -> list[str]:
-    """Every source path a COPY instruction reads from the build context."""
+    """Every source path a COPY instruction reads from the build context.
+
+    `COPY --from=<stage>` reads from an earlier build stage rather than the
+    context, so those lines are skipped: their paths exist only inside the
+    image and cannot be checked against the repository.
+    """
     sources = []
     for line in dockerfile.splitlines():
         if not line.strip().upper().startswith("COPY"):
             continue
-        parts = line.split()[1:]
-        parts = [p for p in parts if not p.startswith("--")]
+        if "--from=" in line:
+            continue
+        parts = [p for p in line.split()[1:] if not p.startswith("--")]
         sources.extend(parts[:-1])  # the last argument is the destination
     return sources
 
@@ -148,6 +154,55 @@ def test_explicit_subdirectory_still_wins(tmp_path, monkeypatch):
     from aquanexus.config import Settings
 
     assert tmp_path / "elsewhere" == Settings().MODELS_DIR
+
+
+# ---------------------------------------------------------------------------
+# Frontend image
+# ---------------------------------------------------------------------------
+
+FRONTEND = ROOT / "frontend"
+
+
+@pytest.fixture(scope="module")
+def frontend_dockerfile() -> str:
+    return (FRONTEND / "Dockerfile").read_text(encoding="utf-8")
+
+
+def test_frontend_build_copies_what_vite_needs(frontend_dockerfile):
+    for source in copied_sources(frontend_dockerfile):
+        # COPY takes globs and writes paths as ./src/ or tsconfig*.json, so
+        # normalise before resolving rather than stat-ing the literal string.
+        pattern = source.removeprefix("./").rstrip("/")
+        assert list(FRONTEND.glob(pattern)), f"frontend Dockerfile COPYs {source!r}"
+
+
+def test_frontend_serves_the_single_page_router():
+    """A client route is not a file; without a fallback, reloading /predict 404s."""
+    config = (FRONTEND / "nginx.conf").read_text(encoding="utf-8")
+    assert "try_files" in config and "/index.html" in config
+
+
+def test_frontend_api_url_is_a_build_argument(frontend_dockerfile):
+    """Vite substitutes import.meta.env at build time.
+
+    Setting VITE_API_BASE_URL in the runtime environment does nothing to an
+    already-built bundle, so the image has to take it as a build argument or the
+    published app silently talks to localhost.
+    """
+    assert re.search(r"^ARG VITE_API_BASE_URL", frontend_dockerfile, re.MULTILINE)
+
+
+def test_compose_builds_the_frontend_with_a_host_reachable_api(compose):
+    """The browser resolves that URL, not the compose network.
+
+    `http://api:8000` works between containers and fails in the browser, which
+    is the sort of thing that only shows up after a deploy.
+    """
+    settings = "\n".join(
+        line for line in compose.splitlines() if not line.strip().startswith("#")
+    )
+    assert "VITE_API_BASE_URL" in settings
+    assert "http://api:8000" not in settings
 
 
 # ---------------------------------------------------------------------------

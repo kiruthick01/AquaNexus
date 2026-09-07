@@ -48,16 +48,21 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
   - Also: compose mounted `./src` over a non-editable install, making the mount inert. `PYTHONPATH=/app/src`.
 - **Docker still unbuilt** (no daemon here). Verified by proxy: clean-venv `pip install ".[ml,api]"`, then served from the installed copy with no source on the path — degraded without `DATA_DIR`, 14/14 smoke checks with it.
 - **API_REFERENCE.md written** — was a placeholder since Phase 3.
+- **Phase 4.** React 19 + TypeScript dashboard (Vite), 5 pages, 7 components, 22 tests. Hand-written CSS sharing the figures' palette; inline SVG for the SHAP bars and the response surface. Verified in a real Chrome against the live API, not only in jsdom.
+  - The browser found three things jsdom could not: CORS rejected the `127.0.0.1` spelling of the dev origin; the default form state opened *outside* the training range; and the UI flagged a depth the API did not, because `check_ranges` ignored the `depth → reach_depth` alias that `build_features` applies. All three fixed.
+  - `/models` now serves `training_ranges`, so the frontend shows where the evidence ends instead of hard-coding numbers that would drift on retraining.
+  - Frontend image (node → nginx, SPA fallback), compose service, and a CI workflow whose `containers` job is the first place either image is actually built.
+  - Added the MIT LICENSE file — pyproject had declared MIT since day one with no licence text in the repo.
 
 
 ### Next session — pick up here
 
-**State:** Phases 1, 2, 3 done. 348 tests, lint clean, all pushed.
+**State:** All four phases done. 355 backend tests + 22 frontend, lint clean, all pushed.
 
 **Next, in order of value:**
-1. Phase 4 — React frontend.
+1. Watch the first CI run: the `containers` job builds both images for the first time. Expect it to be where the remaining Docker unknowns surface.
 2. Cheap and worth it: re-derive reach hydraulics from the sweep inside `/scenario_run` (see below).
-3. When a machine with Docker is available: `docker compose up` then `python scripts/verify_deployment.py`. Everything else about the image is already tested.
+3. Optional polish: dark mode; a shareable permalink for a state; caching `/explain` by state, since it is ~200 ms of SHAP per call.
 
 **Known debt:**
 - 4 cross-sections cut through constrictions (RS 12500/14000/18000/24000) — flagged by validator, not excluded.
@@ -66,7 +71,9 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
 - Scenario answers below ~2 m³/s should not be believed regardless of that fix — the model is biased −2 mg/L there and drought mechanisms (heat, residence time, concentrated load) are not in the feature set.
 - Model beats persistence by only 0.06 R² and loses on MAE; predicted range 3.3–10.1 mg/L against an observed 3.0–17.0, so it cannot flag hypoxic events.
 - HSI labels remain synthetic; only the falsification test constrains them.
-- The image has never been built. `tests/test_deployment.py` covers what a daemon is not needed for; the base image, Linux wheels, libgomp, the non-root user against a bind mount and the HEALTHCHECK loop are unverified.
+- Neither image has been built. `tests/test_deployment.py` (20 tests) covers what a daemon is not needed for; the base images, Linux wheels, libgomp, the non-root user against a bind mount, nginx's reading of its own config and the HEALTHCHECK loops are unverified. CI's `containers` job is where that gets settled.
+- The frontend bakes its API URL in at build time (Vite substitutes `import.meta.env`), so a deployed bundle cannot be repointed without rebuilding.
+- No auth, no TLS, no rate limiting. `/explain` costs ~200 ms of SHAP per call and nothing limits it. See `docs/DEPLOYMENT.md`.
 - The full debt register is also in `05_model_validation.ipynb` §7, so it travels with the analysis.
 
 **To rebuild anything:**
@@ -77,6 +84,9 @@ python scripts/train_models.py                      # both models + manifest
 python scripts/make_figures.py                      # README figures
 uvicorn aquanexus.api.app:app --reload
 python scripts/verify_deployment.py                 # smoke-check a running API
+
+cd frontend && npm install && npm run dev           # dashboard on :3000
+npm run test && npm run build                       # 22 tests, then the bundle
 ```
 Raw data (9.5 GB tiles) is gitignored but already on disk at `data/raw/`.
 
@@ -768,56 +778,60 @@ Phase 3b: integration tests, deployment verification, three fixes
 **Status**: 🟡 In Progress
 
 ### 4a. React Frontend
-- [ ] React project initialized (TypeScript)
-- [ ] Axios API client configured
-- [ ] Dashboard component
-- [ ] EnvironmentalInput form component
-- [ ] PredictionCard component
-- [ ] ScenarioBuilder component
-- [ ] ExplainabilityPanel component
-- [ ] InteractionHeatmap component
-- [ ] Pages: Home, Predict, Scenarios, Analyze, About
-- [ ] Styling (Material-UI or TailwindCSS)
-- [ ] Responsive design tested
+- [x] React project initialised (Vite + TypeScript, React 19)
+- [x] API client configured — `fetch`, not axios (see the note below)
+- [x] Dashboard (Home) with both models side by side
+- [x] EnvironmentalInput form component
+- [x] PredictionCard component
+- [x] ScenarioBuilder component
+- [x] ExplainabilityPanel component (SHAP bars, inline SVG)
+- [x] InteractionHeatmap component (81-call response surface)
+- [x] Pages: Home, Predict, Scenarios, Analyze, About
+- [x] Styling — hand-written CSS, not Material-UI or Tailwind (see below)
+- [x] Responsive design (single-column below 860 px; charts scroll in their own box)
+
+**The design constraint that shaped everything.** One of the two served models is
+trained on labels this project generated. An interface that renders a habitat score
+as a confident number with the caveat one click away would undo what the rest of the
+repo is careful about. So the provenance badge sits in the same card as the number,
+the API's caveats are rendered with the prediction rather than summarised, and the
+collinearity warning is rendered *above* the SHAP chart — the bar order is not a
+ranking, and a reader who sees the chart first has already concluded that it is.
+`src/test/provenance.test.tsx` asserts those properties so a refactor cannot drop them.
+
+**Two deliberate deviations from the plan.** §4a specifies axios and a UI kit. The
+API client is ~100 lines of request building, so a dependency there would only need
+mocking in every test; and a dozen components do not need a framework. The CSS tokens
+are the same ink/accent/cool used by `scripts/make_figures.py`, so the app and the
+README figures read as one project.
 
 **Date Started**: _______________  
 **Date Completed**: _______________  
 
-**Frontend Components Status**:
+**API Integration Test** — driven in a real Chrome, not just jsdom:
 ```
-✓ Dashboard.tsx - Main layout
-✓ EnvironmentalInput.tsx - Form with sliders
-✓ PredictionCard.tsx - Display results
-✓ ExplainabilityPanel.tsx - SHAP visualizations
-✓ InteractionHeatmap.tsx - 2D heatmap
-✓ ScenarioBuilder.tsx - Scenario interface
+Frontend http://localhost:3000  ->  Backend http://localhost:8002
 
-Pages:
-✓ Home.tsx
-✓ Predict.tsx
-✓ Scenarios.tsx
-✓ Analyze.tsx
-✓ About.tsx
+✓ Overview loads both models with correct provenance badges and live metrics
+✓ Predict -> 5.83 mg/L with the four caveats attached
+✓ Predict and explain -> SHAP bars, 10 collinear pairs disclosed above the chart
+✓ Analyze -> 81 predictions in one batch call, heatmap renders
+✓ Degraded backend -> banner naming the fix, verified by pointing at a dead port
 ```
 
-**API Integration Test**:
-```bash
-# Frontend running on http://localhost:3000
-# Backend running on http://localhost:8000
+**Three things the browser found that the tests did not:**
+1. **CORS.** Opening the dev server at `127.0.0.1:3000` failed with an
+   unexplained "cannot reach the API" — the allowlist had only the `localhost`
+   spelling, and a browser treats them as different origins. Both are listed now.
+2. **The default state opened out of range.** Depth 1.8 m is below the training
+   minimum for `reach_depth` (1.86), so the app loaded with a red warning already
+   showing. Defaults moved to the reach means at 12 m³/s.
+3. **The API and the UI disagreed about range checks.** The UI flagged that depth
+   while `/predict` did not: `build_features` maps a caller's point `depth` onto
+   `reach_depth`, but `check_ranges` looked only for the literal name, so an
+   aliased value reached the model unflagged. The check follows the aliases now.
 
-✓ Prediction form submission working
-✓ Results displaying correctly
-✓ SHAP explanations loading
-✓ No CORS errors
-```
-
-**Responsive Design Testing**:
-```
-Desktop (1920x1080): ✓ PASS
-Tablet (768x1024):   ✓ PASS
-Mobile (375x667):    ✓ PASS
-Dark mode:           ✓ IMPLEMENTED (if applicable)
-```
+**Bundle**: 262 kB (83 kB gzipped), 38 modules, ~0.5 s build.
 
 **Commit**:
 ```
@@ -827,77 +841,62 @@ Dark mode:           ✓ IMPLEMENTED (if applicable)
 ---
 
 ### 4b. Testing, Polish & Deployment
-- [ ] Backend unit tests (pytest)
-- [ ] Backend integration tests
-- [ ] Frontend component tests (React Testing Library)
-- [ ] E2E test: data → model → prediction → explanation
-- [ ] UI/UX polish (colors, accessibility, animations)
-- [ ] Docker multi-stage build
-- [ ] GitHub Actions CI/CD pipeline
-- [ ] Final documentation (README, ARCHITECTURE, DEPLOYMENT)
-- [ ] DEVLOG.md completed
+- [x] Backend unit tests (pytest) — 355
+- [x] Backend integration tests — 24, added in Phase 3b
+- [x] Frontend component tests (React Testing Library) — 22
+- [x] E2E: state → prediction → explanation, in a real browser against the real API
+- [x] UI/UX polish — shared palette with the figures, labelled controls, responsive
+- [x] Docker multi-stage build — frontend (node → nginx); API stays single-stage
+- [x] GitHub Actions CI/CD pipeline — backend matrix, frontend, container builds
+- [x] Final documentation (README, DEPLOYMENT, API_REFERENCE, frontend README)
+- [ ] `docker build` still unrun locally — no daemon; the CI `containers` job is
+      the first place either image is actually built
 
 **Date Started**: _______________  
 **Date Completed**: _______________  
 
 **Test Coverage**:
 ```
-Backend:
-  - Unit tests: ✓ [N] tests passing
-  - Integration tests: ✓ [N] tests passing
-  - Coverage: ______%
-  - Command: pytest tests/ --cov=src/aquanexus
-
-Frontend:
-  - Component tests: ✓ [N] tests passing
-  - Coverage: ______%
-  - Command: npm test
+Backend:  355 passing (pytest), ruff clean
+          - 24 integration, 20 deployment invariants, rest unit
+Frontend:  22 passing (vitest + React Testing Library)
+          - 9 provenance contract, 5 API client, 8 app flows
 ```
 
-**CI/CD Pipeline**:
+**CI/CD Pipeline** (`.github/workflows/ci.yml`, push + PR):
 ```
-✓ GitHub Actions workflow created
-✓ Triggers on: push, pull_request
-✓ Steps:
-  1. Run tests
-  2. Build Docker image
-  3. (Optional) Deploy to cloud
-✓ Status: [Check latest run]
+backend     Python 3.11 and 3.12 · ruff check · pytest
+frontend    npm ci · npm run build (typecheck + bundle) · npm run test
+containers  docker build both images · start the API · verify_deployment.py
 ```
+The `containers` job exists because this machine has no Docker: it is the first
+place the images are built at all. The smoke step is `continue-on-error` since CI
+has no trained artefacts, so the API starts degraded there by design.
 
-**Production Docker Image**:
-```bash
-docker build -f Dockerfile -t aquanexus:production .
-✓ Built successfully
-✓ Multi-stage build: ________ MB final image
-✓ Can be deployed to: AWS ECR, Docker Hub, etc.
-```
+**Production Docker Image**: not built locally. The frontend image is the
+multi-stage one (node build → nginx serve, with an SPA fallback so a reload on
+/predict does not 404). The API image stays single-stage: its heavy dependencies
+are runtime dependencies, so a build stage would save nothing.
 
 **Documentation Status**:
 ```
-✓ README.md - Project overview & setup
-✓ ARCHITECTURE.md - System design
-✓ API_REFERENCE.md - Endpoint documentation
-✓ DEPLOYMENT.md - Cloud deployment guide
-✓ CONTRIBUTING.md - Development guide
-✓ LICENSE - MIT
+✓ README.md            overview, results, dashboard, honest limitations
+✓ docs/ARCHITECTURE.md module boundaries
+✓ docs/API_REFERENCE.md endpoints, provenance, performance (was a placeholder)
+✓ docs/DEPLOYMENT.md   running it + a verification-status section
+✓ docs/ML_METHODOLOGY.md every result and deviation
+✓ docs/DATA_SOURCES.md  availability audit
+✓ docs/HECRAS_GUIDE.md  file-format traps
+✓ frontend/README.md    dashboard structure and its constraints
+✓ LICENSE              MIT, added here — pyproject had declared it since day one
+✗ CONTRIBUTING.md      not written — single-author project
 ```
 
-**Deployment Options**:
-```
-Local (docker-compose):
-  docker-compose up → Running on http://localhost:3000
-
-Heroku (optional):
-  heroku create aquanexus
-  git push heroku main
-
-AWS EC2 (optional):
-  [Instructions for EC2 deployment]
-
-Google Cloud Run (optional):
-  gcloud run deploy aquanexus --source .
-```
+**Deployment Options**: `docker compose up` brings up both services (API 8000,
+dashboard 3000). Cloud targets are deliberately not documented as recipes —
+nothing here is production-hardened, and `docs/DEPLOYMENT.md` lists what would
+have to change first (no auth, no TLS, no rate limiting, artefacts mounted from
+the host).
 
 **Final Commit**:
 ```

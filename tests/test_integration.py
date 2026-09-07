@@ -231,6 +231,46 @@ def test_models_endpoint_matches_the_manifest(client, manifest):
         assert served[name]["n_train"] == meta["n_train"]
 
 
+@models_present
+def test_models_endpoint_publishes_training_ranges(client, manifest):
+    """A client cannot show where the evidence ends unless it can see the edge.
+
+    Without this the dashboard would have to hard-code the ranges, and they
+    would drift the first time the models were retrained.
+    """
+    served = {m["target"]: m for m in client.get("/models").json()}
+    for name, meta in manifest["models"].items():
+        assert served[name]["training_ranges"], f"{name}: no ranges served"
+        assert set(served[name]["training_ranges"]) == set(meta["training_ranges"])
+
+
+@models_present
+def test_out_of_range_check_follows_feature_aliases(client):
+    """Regression: an aliased value reached the model unflagged.
+
+    A caller supplies a point `depth`; `build_features` feeds it to the model as
+    `reach_depth`, which is what the training range is recorded against. The
+    check looked only for the literal name, so a depth far outside anything the
+    model had seen was answered as though it were ordinary.
+    """
+    shallow = {**STATE, "depth": 0.2}
+    body = client.post("/predict", json={"target": "dissolved_oxygen",
+                                         "state": shallow}).json()
+
+    flagged = {warning["feature"] for warning in body["out_of_range"]}
+    assert "reach_depth" in flagged, body["out_of_range"]
+
+
+@models_present
+def test_a_state_inside_the_ranges_is_not_flagged(client):
+    """The other half of it: no crying wolf on ordinary conditions."""
+    ordinary = {**STATE, "depth": 2.9, "velocity": 0.41, "discharge": 12.0,
+                "water_temp": 24.5}
+    body = client.post("/predict", json={"target": "dissolved_oxygen",
+                                         "state": ordinary}).json()
+    assert body["out_of_range"] == []
+
+
 # ---------------------------------------------------------------------------
 # Degraded operation
 # ---------------------------------------------------------------------------

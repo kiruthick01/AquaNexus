@@ -173,6 +173,12 @@ class ModelInfo(BaseModel):
     features: list[str]
     metrics: dict[str, float | str]
     caveats: list[str]
+    training_ranges: dict[str, list[float]] = Field(
+        default_factory=dict,
+        description="Observed [min, max] per feature. A client that cannot see "
+                    "these cannot show where the model's evidence ends, and "
+                    "would have to hard-code them to try.",
+    )
 
 
 class HealthResponse(BaseModel):
