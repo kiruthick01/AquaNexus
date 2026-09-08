@@ -378,3 +378,73 @@ def test_do_feature_set_excludes_co_sampled_chemistry():
     for chemistry in ("bod", "cod", "nitrogen_total", "phosphorus_total",
                       "suspended_solids", "ph"):
         assert chemistry not in DO_FEATURES
+
+
+# ---------------------------------------------------------------------------
+# Manning's n sensitivity (scripts/manning_sensitivity.py)
+# ---------------------------------------------------------------------------
+
+
+def test_reach_means_average_over_the_sections():
+    """The DO model consumes reach means, so the study must too."""
+    import pandas as pd
+
+    from scripts.manning_sensitivity import reach_means
+
+    results = pd.DataFrame({
+        "manning": [0.035] * 4,
+        "discharge_bc": [1.0, 1.0, 10.0, 10.0],
+        "depth": [1.0, 3.0, 2.0, 4.0],
+        "velocity": [0.2, 0.4, 0.3, 0.5],
+        "top_width": [10.0, 20.0, 30.0, 40.0],
+    })
+    means = reach_means(results).set_index("discharge_bc")
+
+    assert means.loc[1.0, "depth"] == 2.0
+    assert means.loc[10.0, "velocity"] == 0.4
+    assert means.loc[10.0, "top_width"] == 35.0
+
+
+def test_the_report_states_the_share_of_error_and_a_verdict():
+    """A sensitivity study that leaves the reader to divide has not finished.
+
+    The document has to say whether the roughness is a first-order limitation,
+    because "here are some numbers" is what left it unranked for three days.
+    """
+    import pandas as pd
+
+    from scripts.manning_sensitivity import RMSE, report
+
+    means = pd.DataFrame({
+        "manning": [0.030, 0.035], "discharge_bc": [8.1, 8.1],
+        "depth": [2.591, 2.650], "velocity": [0.402, 0.371],
+        "top_width": [59.4, 61.2],
+    })
+    shifts = pd.DataFrame({
+        "manning": [0.030, 0.035], "mean_prediction": [6.505, 7.063],
+        "mean_abs_shift": [0.558, 0.0],
+        "max_abs_shift": [0.9 * RMSE, 0.0],  # deliberately large
+    })
+
+    document = report(means, shifts)
+    assert "% of the model's error" in document
+    assert "first-order limitation" in document
+    assert "rating curve" in document, "the document should say what would fix it"
+
+
+def test_a_small_shift_is_reported_as_small():
+    """The verdict must be able to say the roughness does not matter."""
+    import pandas as pd
+
+    from scripts.manning_sensitivity import RMSE, report
+
+    means = pd.DataFrame({
+        "manning": [0.035], "discharge_bc": [8.1], "depth": [2.65],
+        "velocity": [0.371], "top_width": [61.2],
+    })
+    shifts = pd.DataFrame({
+        "manning": [0.035], "mean_prediction": [7.063],
+        "mean_abs_shift": [0.01], "max_abs_shift": [0.01 * RMSE],
+    })
+
+    assert "other things limit the project first" in report(means, shifts)

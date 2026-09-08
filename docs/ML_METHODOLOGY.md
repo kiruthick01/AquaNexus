@@ -397,6 +397,35 @@ These are partial-dependence curves: they describe what the model does, not what
 the river does. Holding correlated features at their median produces combinations
 that may never occur.
 
+## Manning's n — how much the uncalibrated roughness is worth
+
+`scripts/manning_sensitivity.py`, full results in `MANNING_SENSITIVITY.md`.
+
+The channel roughness was never calibrated: no gauged rating curve exists for
+this reach, so 0.035 is a textbook value for a lowland earth channel. Re-running
+the same 12-discharge sweep across 0.025–0.050 puts a number on that choice.
+
+| n | reach depth at 8.1 m³/s | mean shift in predicted DO | worst shift |
+|---|---|---|---|
+| 0.025 | 2.569 m | 0.717 mg/L | 1.098 mg/L |
+| 0.030 | 2.591 m | 0.558 | 0.837 |
+| **0.035 (shipped)** | **2.650 m** | — | — |
+| 0.040 | 2.670 m | 0.127 | 0.284 |
+| 0.045 | 2.689 m | 0.215 | 0.445 |
+| 0.050 | 2.748 m | 0.521 | 0.812 |
+
+**Up to 64% of the model's 1.713 mg/L RMSE comes from a constant nobody
+measured.** The asymmetry is the interesting part: depth moves only a few
+percent across the whole range while the predictions move by a large fraction of
+an mg/L. The hydraulic features are collinear and carry large offsetting
+coefficients, so a small error in depth does not stay small by the time it
+reaches the answer — the same collinearity that makes individual SHAP ranks
+untrustworthy also amplifies hydraulic error.
+
+This does not calibrate anything. It ranks the problem: one gauged
+stage-discharge record for this reach would replace the range with a value, and
+is worth more than any modelling change currently available.
+
 ## Phase 2c — validation and baselines
 
 `aquanexus.ml.validator`. All figures grouped-CV, each station held out.

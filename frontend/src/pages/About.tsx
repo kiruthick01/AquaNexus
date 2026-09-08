@@ -97,9 +97,11 @@ export default function About() {
             sign reverses. It is not established.
           </li>
           <li>
-            <strong>Uncalibrated roughness.</strong> No gauged rating curve was
-            available for this reach, so Manning's n carries an unquantified
-            systematic error into every depth and velocity.
+            <strong>Uncalibrated roughness.</strong> No gauged rating curve
+            exists for this reach, so Manning's n was set from a textbook. Across
+            its plausible range the predictions move by up to 1.10 mg/L — 64% of
+            the model's error — which makes one rating curve the most valuable
+            measurement missing from the project.
           </li>
         </ul>
       </section>

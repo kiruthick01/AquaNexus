@@ -418,7 +418,7 @@ Stated here rather than discovered later:
 | **Small sample** | The real target has **n = 138** across 4 stations. Everything should be read with that attached. |
 | **Barely beats persistence** | +0.06 R², and loses on MAE. |
 | **Unreliable at low flow** | Under-predicts oxygen by ~2 mg/L below ≈2 m³/s. |
-| **Manning's *n* is assumed** | 0.035 channel / 0.06 overbank, not calibrated — no gauged rating curve exists for this reach. Relative behaviour is more trustworthy than absolute depth. |
+| **Manning's *n* is assumed** | 0.035 channel / 0.06 overbank, not calibrated — no gauged rating curve exists for this reach. **Measured, not hand-waved:** across the plausible range 0.025–0.050 the predictions move up to 1.10 mg/L, 64% of the model's RMSE. See [`docs/MANNING_SENSITIVITY.md`](docs/MANNING_SENSITIVITY.md). |
 | **HSI labels are synthetic** | Generated here from response curves. High accuracy = function recovery. |
 | **Biology is validation only** | n = 6 for the Ayase. Too small to train on; used as an independent check. |
 | **4 sections flagged** | Cut through constrictions or structures; listed by the validator, not yet excluded. |

@@ -67,7 +67,7 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
 
 **Known debt:**
 - 4 cross-sections cut through constrictions (RS 12500/14000/18000/24000) — flagged by validator, not excluded.
-- Manning's n uncalibrated — depth/velocity carry unquantified systematic error.
+- Manning's n uncalibrated — **quantified 09-08** (`docs/MANNING_SENSITIVITY.md`): across the plausible range 0.025–0.050 the predictions move up to 1.10 mg/L, **64% of the model's 1.713 RMSE**. Still uncalibrated, but no longer unquantified: a gauged rating curve for this reach is now the single highest-value missing measurement.
 - ~~`/scenario_run` holds depth/velocity/width fixed when discharge changes~~ — **fixed 09-08**: the hydraulics are re-interpolated from `ayase_flow_sweep.csv` at the scenario discharge, and `reach_top_width`, which no caller field could ever supply, no longer falls back to an imputed median on every request.
 - Scenario answers below ~2 m³/s should not be believed regardless of that fix — the model is biased −2 mg/L there and drought mechanisms (heat, residence time, concentrated load) are not in the feature set.
 - Model beats persistence by only 0.06 R² and loses on MAE; predicted range 3.3–10.1 mg/L against an observed 3.0–17.0, so it cannot flag hypoxic events.
@@ -994,9 +994,13 @@ explainer once per model.
 5. **Run the app.** Three defects — CORS, out-of-range defaults, and the
    alias mismatch between UI and API — survived 377 passing tests and appeared
    within two minutes in a browser.
-6. **For next version**: calibrate Manning's n against a gauged rating curve,
-   re-cut the four bad cross-sections, and get low-flow observations. Those three
-   things bound almost everything the project currently cannot claim.
+6. **Quantify what you cannot fix.** Manning's n could not be calibrated, so it
+   sat in the limitations as "unquantified systematic error" for three days.
+   Re-running the sweep across the plausible range took twenty minutes and
+   turned it into a number: 64% of the model's RMSE. An unquantified limitation
+   is an unranked one, and unranked limitations cannot be prioritised.
+7. **For next version**: a gauged rating curve first — the sensitivity study says
+   so — then re-cut the four bad cross-sections, then low-flow observations.
 
 ## Next Steps (Beyond PoC)
 
