@@ -388,7 +388,6 @@ def test_do_feature_set_excludes_co_sampled_chemistry():
 def test_reach_means_average_over_the_sections():
     """The DO model consumes reach means, so the study must too."""
     import pandas as pd
-
     from scripts.manning_sensitivity import reach_means
 
     results = pd.DataFrame({
@@ -412,7 +411,6 @@ def test_the_report_states_the_share_of_error_and_a_verdict():
     because "here are some numbers" is what left it unranked for three days.
     """
     import pandas as pd
-
     from scripts.manning_sensitivity import RMSE, report
 
     means = pd.DataFrame({
@@ -435,7 +433,6 @@ def test_the_report_states_the_share_of_error_and_a_verdict():
 def test_a_small_shift_is_reported_as_small():
     """The verdict must be able to say the roughness does not matter."""
     import pandas as pd
-
     from scripts.manning_sensitivity import RMSE, report
 
     means = pd.DataFrame({
