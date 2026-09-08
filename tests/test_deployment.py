@@ -1,8 +1,9 @@
 """Deployment invariants for the container build.
 
-Docker is not installed on the development machine, so the image has never been
-built or run. These tests check everything about it that *can* be checked
-without a daemon: that the build would find the files it copies, that the
+Docker is not installed on the development machine, so nothing here is built
+locally - CI builds both images on every push, and does so successfully. These
+tests are the fast feedback in between: they check everything that *can* be
+checked without a daemon, that the build would find the files it copies, that the
 dependency extras it installs exist, that nothing the build needs is excluded by
 .dockerignore, and that the compose file's mounts and entrypoint agree with how
 the image is actually laid out.
@@ -63,6 +64,21 @@ def test_every_copied_path_exists(dockerfile):
     """A COPY of a missing path fails the build, and only at build time."""
     for source in copied_sources(dockerfile):
         assert (ROOT / source).exists(), f"Dockerfile COPYs missing path {source!r}"
+
+
+def test_reading_the_monitoring_record_is_a_declared_dependency():
+    """Regression: openpyxl was used and never declared.
+
+    `loader.load_workbook` reads .xlsx through pandas, which needs openpyxl. It
+    was installed on the development machine as somebody else's transitive
+    dependency, so every loader test passed locally and every one of them failed
+    on a clean machine - eight CI runs in a row, unread.
+    """
+    declared = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    required = " ".join(declared["project"]["dependencies"])
+    assert "openpyxl" in required, (
+        "pandas cannot read the .xlsx monitoring record without it"
+    )
 
 
 def test_installed_extras_are_declared(dockerfile):

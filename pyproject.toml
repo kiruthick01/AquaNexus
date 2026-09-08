@@ -24,6 +24,10 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "python-dotenv>=1.0",
+    # pandas needs this to read the monitoring record, which ships as .xlsx.
+    # It was undeclared and happened to be installed here, so every loader test
+    # passed locally and failed on a clean machine.
+    "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]

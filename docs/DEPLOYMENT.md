@@ -1,8 +1,9 @@
 # Deployment
 
-Two images: a FastAPI backend and an nginx-served React bundle. Neither has been
-built — Docker is not installed on the development machine — so read the
-[Verification status](#verification-status) section before trusting any of this.
+Two images: a FastAPI backend and an nginx-served React bundle. Both build in
+CI on every push and the API container has been started there; neither is built
+on the development machine, which has no Docker. See
+[Verification status](#verification-status) for exactly what that covers.
 
 ---
 
@@ -129,8 +130,18 @@ Honest accounting of what has actually been checked.
   and confirming in a browser that rewriting that one file repoints the app
   without a rebuild.
 
-**Not verified:** `docker build`, either image. The base images, Linux wheels,
-`libgomp`, the non-root user against a bind-mounted volume, the nginx config as
-nginx reads it, and the healthcheck loops are all unchecked. The `containers`
-job in `.github/workflows/ci.yml` builds both images and starts the API, so the
-first CI run on a machine with a daemon is where this gets settled.
+**Verified in CI** (`containers` job, every push):
+
+- `docker build` of both images on Linux — base images, wheels and `libgomp`
+  included.
+- `docker run` of the API with `./data` mounted: it starts, answers `/health` in
+  about 4 ms, and reports `degraded` naming `/app/data/models/manifest.json` —
+  which confirms `DATA_DIR` resolves to the mount rather than into site-packages.
+- The smoke script against that container: reachable, `/docs` and
+  `/openapi.json` served, malformed requests rejected as JSON.
+
+**Still not verified:** the frontend container *running* (it is built, not
+started), the nginx SPA fallback and `no-store` behaviour as nginx applies them,
+the healthcheck loops, the non-root user against a bind mount with real
+artefacts, and the full smoke suite against a container that has models — CI has
+no trained artefacts, so the model-dependent checks skip there by design.

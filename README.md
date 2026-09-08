@@ -346,11 +346,12 @@ cd frontend && npm install && npm run dev   # http://localhost:3000
 `src/test/provenance.test.tsx` exists to stop a refactor quietly dropping any of
 those properties. See [`frontend/README.md`](frontend/README.md).
 
-> **Container status:** the image has never been built — Docker is not installed on
-> the development machine. Everything checkable without a daemon is covered by
-> `tests/test_deployment.py`, and the install step was verified by installing the
-> package into a clean environment and serving from it. `docker build` itself is
-> unverified.
+> **Container status:** both images build in CI on every push, and the API container
+> starts there and answers `/health` correctly in its degraded state (CI has no
+> trained artefacts). Nothing is built on the development machine, which has no
+> Docker. What remains unverified — the frontend container running, nginx's own
+> handling of the SPA fallback, the healthcheck loops — is listed in
+> [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ---
 

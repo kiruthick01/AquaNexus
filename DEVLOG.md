@@ -72,6 +72,8 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
 | hydraulic gain over raw discharge | +0.062 R² | **+0.019 R²** |
 
   Every headline in the project got weaker, including the central claim about the physics-informed step, which the flawed geometry had inflated threefold. The numbers above replace the Phase 2 ones throughout README, ML_METHODOLOGY, the API caveats, the figures and the dashboard; the Phase 2 entries in this log are left as written, because they record what was true when they were written.
+- **CI had been failing since it was added, on every one of eight pushes.** I had been writing "CI has never run" without checking `gh run list`. It had: `openpyxl` is used by the loader to read the .xlsx monitoring record and was never declared, so it worked here and failed on every clean machine. Declared now, with a test that asserts it.
+  - The same runs settle the standing Docker caveat in the other direction: **both images build** and the API container starts, answers `/health` in 4 ms and reports degraded against `/app/data/models/manifest.json` — which independently confirms the `DATA_DIR` fix from Phase 3b.
 - **`scripts/run_hecras.py` implemented** — it had been a `NotImplementedError` placeholder since Phase 1. It runs the 12-discharge sweep and writes the CSV the models are built from, with `--exclude-flagged` for the above.
 
 ### Next session — pick up here
@@ -79,7 +81,7 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
 **State:** All four phases done, plus a round of open-item work. 376 backend tests + 22 frontend, lint clean, all pushed. The models were retrained on corrected geometry (49 sections) on 09-08 — R² 0.394, RMSE 1.785.
 
 **Next, in order of value:**
-1. Watch the first CI run: the `containers` job builds both images for the first time. Expect it to be where the remaining Docker unknowns surface.
+1. ~~Watch the first CI run~~ — **done 09-08, and it had been red since it was added.** Both images build and the API container serves; the failure was `openpyxl`, used by the loader and never declared, which was installed here as somebody else's transitive dependency. Eight red runs went unread because I assumed CI had never run rather than checking.
 2. Cheap and worth it: re-derive reach hydraulics from the sweep inside `/scenario_run` (see below).
 3. Optional polish: dark mode; a shareable permalink for a state; caching `/explain` by state, since it is ~200 ms of SHAP per call.
 
@@ -90,7 +92,7 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
 - Scenario answers below ~2 m³/s should not be believed regardless — the model is biased −2.26 mg/L there and drought mechanisms (heat, residence time, concentrated load) are not in the feature set.
 - Model beats persistence by **0.009 R²** and loses on MAE; predicted range 4.2–10.2 mg/L against an observed 3.0–17.0, so it cannot flag hypoxic events. Both got worse when the geometry was corrected.
 - HSI labels remain synthetic; only the falsification test constrains them.
-- Neither image has been built. `tests/test_deployment.py` (20 tests) covers what a daemon is not needed for; the base images, Linux wheels, libgomp, the non-root user against a bind mount, nginx's reading of its own config and the HEALTHCHECK loops are unverified. CI's `containers` job is where that gets settled.
+- Both images build in CI and the API container starts there. Still unverified: the **frontend** container running, nginx's own SPA fallback and `no-store` handling, the HEALTHCHECK loops, and the full smoke suite against a container that has trained artefacts (CI has none).
 - ~~The frontend bakes its API URL in at build time~~ — **fixed 09-08**: the container entrypoint writes `/config.js` from `$API_BASE_URL` and the page reads it at load, verified by repointing a built bundle in the browser without rebuilding.
 - No auth and no TLS. `/explain` is now cached by state (~15 ms on a repeat) and capped per client, but the limit is per-process, so a shared one needs a gateway. See `docs/DEPLOYMENT.md`.
 - The full debt register is also in `05_model_validation.ipynb` §7, so it travels with the analysis.
