@@ -183,7 +183,7 @@ def test_scenario_states_it_is_not_a_simulation(client):
         "scenario_name": "x", "baseline": STATE,
         "modifications": {"discharge": -0.2}, "target": "hsi",
     }).json()
-    assert any("does not re-run" in c for c in body["caveats"])
+    assert any("not re-run" in c for c in body["caveats"])
 
 
 @models_present

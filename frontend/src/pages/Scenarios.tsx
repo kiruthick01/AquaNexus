@@ -38,9 +38,10 @@ export default function Scenarios({ models }: { models: ModelState }) {
     <>
       <h1>Scenarios</h1>
       <p className="muted prose">
-        Fractional changes against a baseline state. This asks the model a
-        hypothetical; it does not re-run the hydraulic simulation, so the answer
-        is a sensitivity of the fitted relationship rather than a forecast.
+        Fractional changes against a baseline state. Change the discharge and
+        the hydraulics follow, re-interpolated from the HEC-RAS sweep — but the
+        sweep is precomputed, so the answer is a sensitivity of the fitted
+        relationship rather than a forecast.
       </p>
 
       {error && <ErrorBanner message={error} />}

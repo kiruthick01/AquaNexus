@@ -77,6 +77,8 @@ export interface ScenarioResponse {
   change: number;
   percent_change: number | null;
   applied: Record<string, number>;
+  /** Hydraulics re-interpolated from the sweep at the scenario's discharge. */
+  derived: Record<string, number>;
   interpretation: string;
   out_of_range: RangeWarning[];
   caveats: string[];

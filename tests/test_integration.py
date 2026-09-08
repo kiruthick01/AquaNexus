@@ -271,6 +271,83 @@ def test_a_state_inside_the_ranges_is_not_flagged(client):
     assert body["out_of_range"] == []
 
 
+@models_present
+def test_scenario_carries_the_hydraulics_with_the_discharge(client):
+    """Regression: a drought used to be evaluated at the baseline's depth.
+
+    /scenario_run changed discharge and left depth, velocity and width where the
+    caller put them, handing the model a state the river cannot be in. They are
+    re-interpolated from the HEC-RAS sweep now, and the response says so.
+    """
+    body = client.post("/scenario_run", json={
+        "scenario_name": "drought", "target": "dissolved_oxygen",
+        "baseline": STATE, "modifications": {"discharge": -0.6},
+    }).json()
+
+    derived = body["derived"]
+    assert derived, "hydraulics were not carried with the discharge"
+    assert any("re-interpolated" in caveat for caveat in body["caveats"])
+
+    # The caller's `depth` is a point; the derived value is a reach mean over 53
+    # sections, so they are not comparable. What must hold is that the derived
+    # hydraulics move with discharge.
+    flood = client.post("/scenario_run", json={
+        "scenario_name": "flood", "target": "dissolved_oxygen",
+        "baseline": STATE, "modifications": {"discharge": 1.5},
+    }).json()["derived"]
+
+    for quantity in ("depth", "velocity", "top_width"):
+        assert derived[quantity] < flood[quantity], (
+            f"{quantity} did not follow the discharge: "
+            f"{derived[quantity]} at low flow vs {flood[quantity]} at high"
+        )
+
+
+@models_present
+def test_a_caller_who_sets_depth_is_taken_at_their_word(client):
+    """Explicit beats derived: second-guessing the caller would be worse."""
+    body = client.post("/scenario_run", json={
+        "scenario_name": "dredged channel", "target": "dissolved_oxygen",
+        "baseline": STATE, "modifications": {"discharge": -0.6},
+        "absolute_modifications": {"depth": 4.0},
+    }).json()
+
+    assert body["applied"]["depth"] == 4.0
+    assert "depth" not in body["derived"]
+    assert "velocity" in body["derived"], "the rest should still follow"
+
+
+@models_present
+def test_scenario_without_a_discharge_change_derives_nothing(client):
+    body = client.post("/scenario_run", json={
+        "scenario_name": "heatwave", "target": "dissolved_oxygen",
+        "baseline": STATE, "modifications": {"water_temp": 0.15},
+    }).json()
+    assert body["derived"] == {}
+
+
+@models_present
+def test_reach_width_comes_from_the_sweep_not_an_imputed_median(client):
+    """Regression: no caller field maps to reach_top_width.
+
+    It was NaN on every request, so the linear pipeline filled it with the
+    training median - the same width at 1 m3/s as at 70. Predictions at
+    different discharges now differ by more than the discharge coefficient
+    alone.
+    """
+    from aquanexus.api.registry import ModelRegistry
+
+    loaded = ModelRegistry().load()
+    assert loaded.sweep is not None, "flow sweep not loaded"
+
+    model = loaded.models["dissolved_oxygen"]
+    low = loaded.build_features({**STATE, "discharge": 1.0}, model)
+    high = loaded.build_features({**STATE, "discharge": 60.0}, model)
+
+    assert low["reach_top_width"].notna().all()
+    assert float(low["reach_top_width"].iloc[0]) < float(high["reach_top_width"].iloc[0])
+
+
 # ---------------------------------------------------------------------------
 # Degraded operation
 # ---------------------------------------------------------------------------

@@ -69,6 +69,10 @@ class ModelRegistry:
         self.models: dict[str, LoadedModel] = {}
         self.manifest: dict = {}
         self.error: str | None = None
+        #: The HEC-RAS flow sweep, so a change in discharge can carry the
+        #: hydraulics with it. Optional: without it the API still answers, using
+        #: whatever the caller supplied.
+        self.sweep: pd.DataFrame | None = None
         # Sync routes run in a threadpool, so two requests can race to build the
         # same explainer. Building it twice is wasteful rather than wrong, but
         # the lock keeps startup cost predictable.
@@ -88,6 +92,7 @@ class ModelRegistry:
             return self
 
         self.manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.sweep = self._load_sweep()
         for name, meta in self.manifest.get("models", {}).items():
             path = models_dir / meta["path"]
             if not path.is_file():
@@ -120,6 +125,52 @@ class ModelRegistry:
         if not self.models:
             self.error = "no models could be loaded"
         return self
+
+    @staticmethod
+    def _load_sweep() -> pd.DataFrame | None:
+        """Read the flow sweep, or None if it has not been generated."""
+        path = settings.PROCESSED_DIR / "ayase_flow_sweep.csv"
+        if not path.is_file():
+            log.warning("no flow sweep at %s; hydraulics cannot follow discharge",
+                        path)
+            return None
+        try:
+            sweep = pd.read_csv(path)
+        except Exception as exc:  # noqa: BLE001 - a bad sweep must not stop loading
+            log.warning("flow sweep could not be read: %s", exc)
+            return None
+        log.info("flow sweep: %d section(s) x %d discharge(s)",
+                 sweep["river_station"].nunique(), sweep["discharge_bc"].nunique())
+        return sweep
+
+    def reach_hydraulics(self, discharge: float) -> dict[str, float]:
+        """Reach-mean depth, velocity, width and Froude number at one discharge.
+
+        Interpolated from the HEC-RAS sweep, which is how the training rows were
+        built: `build_water_quality_dataset` averages the same quantities over
+        the 53 cross-sections. Returns an empty dict when no sweep is loaded.
+        """
+        if self.sweep is None or not np.isfinite(discharge):
+            return {}
+
+        from aquanexus.data.dataset import interpolate_hydraulics
+
+        try:
+            sections = interpolate_hydraulics(self.sweep, float(discharge))
+        except Exception as exc:  # noqa: BLE001 - never cost the caller a prediction
+            log.warning("could not interpolate hydraulics at %.3f: %s", discharge, exc)
+            return {}
+
+        depth = float(sections["depth"].mean())
+        velocity = float(sections["velocity"].mean())
+        derived = {
+            "reach_depth": depth,
+            "reach_velocity": velocity,
+            "reach_top_width": float(sections["top_width"].mean()),
+        }
+        if depth > 0:
+            derived["reach_froude"] = velocity / float(np.sqrt(9.80665 * depth))
+        return derived
 
     def explainer_for(self, model: LoadedModel):
         """The model's SHAP explainer, built once and reused.
@@ -201,6 +252,15 @@ class ModelRegistry:
         for source, alias in (("depth", "reach_depth"), ("velocity", "reach_velocity")):
             if values.get(source) is not None:
                 values.setdefault(alias, values[source])
+
+        # Anything still missing is interpolated from the HEC-RAS sweep at this
+        # discharge. `reach_top_width` has no caller-facing field at all, so
+        # without this it was NaN on every request and the linear pipeline
+        # imputed the training median - the same width whatever the flow.
+        discharge = values.get("discharge")
+        if discharge is not None:
+            for name, derived in self.reach_hydraulics(float(discharge)).items():
+                values.setdefault(name, derived)
 
         month = values.get("month")
         if month is not None:

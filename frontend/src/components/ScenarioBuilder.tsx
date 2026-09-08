@@ -1,11 +1,12 @@
 /**
  * What-if controls over a baseline state.
  *
- * The endpoint moves the model's inputs; it does not re-run HEC-RAS. A drought
- * scenario therefore leaves depth, velocity and width where the baseline put
- * them - a state the river cannot physically be in - and the result is
- * unreliable below about 2 m³/s regardless. Both facts are shown with the
- * answer, not filed under a help link.
+ * Changing discharge now carries the hydraulics with it - the API re-interpolates
+ * depth, velocity and width from the HEC-RAS sweep - so the state stays
+ * physically coherent. What it still is not is a forecast: the sweep is
+ * precomputed steady-flow profiles, and below about 2 m³/s the model is
+ * unreliable whatever it is fed. Both facts are shown with the answer, not
+ * filed under a help link.
  */
 
 import { useState } from "react";
@@ -190,11 +191,21 @@ function ScenarioResult({ result }: { result: ScenarioResponse }) {
       <p className="interpretation">{result.interpretation}</p>
 
       <div className="warning">
-        <strong>This is a model sensitivity, not a simulation.</strong> Changing
-        discharge here moves the model's input; it does not re-run HEC-RAS, so
-        depth, velocity and width stay at their baseline values — a combination
-        the river cannot actually be in.
+        <strong>This is a model sensitivity, not a simulation.</strong> Depth,
+        velocity and width were re-interpolated from the HEC-RAS sweep at this
+        discharge, so the state is coherent — but the sweep is precomputed
+        steady-flow profiles, not a fresh run, and a driver changed on its own
+        can still describe conditions this river does not produce.
       </div>
+      {Object.keys(result.derived).length > 0 && (
+        <p className="small muted">
+          Carried with the discharge:{" "}
+          {Object.entries(result.derived)
+            .map(([name, value]) => `${name} ${value}`)
+            .join(", ")}
+          .
+        </p>
+      )}
 
       <CaveatList caveats={result.caveats} labels={result.labels} />
     </section>

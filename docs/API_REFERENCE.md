@@ -174,12 +174,18 @@ curl -X POST http://localhost:8000/scenario_run \
 values directly and win where both name a field. Fractions below −1.0 are
 rejected. Fields absent from the baseline cannot be modified (422).
 
-**This is a model sensitivity, not a simulation.** Changing discharge moves the
-model's input; it does not re-run HEC-RAS, so depth, velocity and width stay
-where the caller left them — a state the river cannot physically be in. Below
-about 2 m³/s the result should not be believed at all; see
-`notebooks/05_model_validation.ipynb` §6 for the worked example and
-`DEVLOG.md` for the open items.
+**This is a model sensitivity, not a forecast.** Changing discharge carries the
+hydraulics with it: depth, velocity and width are re-interpolated from the
+HEC-RAS flow sweep at the new discharge, which is how the training rows were
+built. The response lists what was re-derived under `derived`. The simulation
+itself is not re-run — the sweep is a precomputed set of steady-flow profiles.
+
+A caller who sets `depth` or `velocity` explicitly is taken at their word and
+nothing is re-derived for them.
+
+Below about 2 m³/s the result should not be believed regardless: the model is
+biased about −2 mg/L in that band, and most of its low-flow evidence comes from
+a single shallow upstream station. See `notebooks/05_model_validation.ipynb` §6.
 
 ---
 

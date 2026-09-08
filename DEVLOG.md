@@ -68,7 +68,7 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
 **Known debt:**
 - 4 cross-sections cut through constrictions (RS 12500/14000/18000/24000) — flagged by validator, not excluded.
 - Manning's n uncalibrated — depth/velocity carry unquantified systematic error.
-- `/scenario_run` holds depth/velocity/width fixed when discharge changes, so every discharge scenario describes a state the river cannot be in. Fix: re-interpolate from `ayase_flow_sweep.csv` (worked example in 05 §6).
+- ~~`/scenario_run` holds depth/velocity/width fixed when discharge changes~~ — **fixed 09-08**: the hydraulics are re-interpolated from `ayase_flow_sweep.csv` at the scenario discharge, and `reach_top_width`, which no caller field could ever supply, no longer falls back to an imputed median on every request.
 - Scenario answers below ~2 m³/s should not be believed regardless of that fix — the model is biased −2 mg/L there and drought mechanisms (heat, residence time, concentrated load) are not in the feature set.
 - Model beats persistence by only 0.06 R² and loses on MAE; predicted range 3.3–10.1 mg/L against an observed 3.0–17.0, so it cannot flag hypoxic events.
 - HSI labels remain synthetic; only the falsification test constrains them.

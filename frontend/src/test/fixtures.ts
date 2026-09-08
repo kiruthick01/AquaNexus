@@ -129,6 +129,7 @@ export const scenario: ScenarioResponse = {
   change: 0.15,
   percent_change: 2.2,
   applied: { discharge: 4.8 },
+  derived: { depth: 2.4148, velocity: 0.3183, top_width: 56.4246 },
   interpretation: "Drought improves the outcome by 0.150 mg/L.",
   out_of_range: [],
   caveats: oxygenModel.caveats,

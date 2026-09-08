@@ -290,8 +290,10 @@ Design decisions worth noting:
 - **Out-of-range inputs are answered and flagged, not refused.** Refusing is unhelpful;
   answering silently would imply confidence the model has not earned.
 - **Partial states predict.** A grab sample is partial by nature.
-- **`/scenario_run` states plainly that it moves model inputs and does not re-run
-  HEC-RAS.**
+- **`/scenario_run` carries the hydraulics with the discharge**, re-interpolating
+  depth, velocity and width from the HEC-RAS sweep so a drought is not evaluated at
+  the flood's depth — while saying plainly that the sweep is precomputed and this
+  is a sensitivity, not a forecast.
 - **Models are not baked into the image.** They are build outputs, so the container
   reads them from the mounted `./data`. Without that mount it starts *degraded* and
   `/health` says why, rather than serving predictions from nothing.

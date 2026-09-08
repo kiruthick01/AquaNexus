@@ -138,6 +138,13 @@ class ScenarioResponse(BaseModel):
     change: float
     percent_change: float | None
     applied: dict[str, float]
+    derived: dict[str, float] = Field(
+        default_factory=dict,
+        description="Hydraulics re-interpolated from the HEC-RAS sweep at the "
+                    "scenario's discharge. Without these a discharge change "
+                    "would leave depth, velocity and width at their baseline "
+                    "values, describing a state the river cannot be in.",
+    )
     interpretation: str
     out_of_range: list[RangeWarning] = Field(default_factory=list)
     caveats: list[str] = Field(default_factory=list)

@@ -76,8 +76,9 @@ export default function About() {
           </li>
           <li>
             <strong>Scenarios are not simulations.</strong> Changing discharge
-            moves the model's input; it does not re-run HEC-RAS, so depth,
-            velocity and width stay put — a state the river cannot be in.
+            re-interpolates depth, velocity and width from the HEC-RAS sweep, so
+            the state is coherent — but the sweep is precomputed, and the answer
+            is a sensitivity of the fitted relationship, not a forecast.
           </li>
           <li>
             <strong>The model cannot reach the extremes.</strong> Observed oxygen
