@@ -441,6 +441,9 @@ Stated here rather than discovered later:
 | [`docs/HECRAS_GUIDE.md`](docs/HECRAS_GUIDE.md) | File-format rules that fail silently |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module boundaries and design decisions |
 | [`DEVLOG.md`](DEVLOG.md) | Short daily progress notes |
+| [`docs/MANNING_SENSITIVITY.md`](docs/MANNING_SENSITIVITY.md) | What the uncalibrated roughness is worth |
+| [`docs/CONSTRICTION_IMPACT.md`](docs/CONSTRICTION_IMPACT.md) | Why four cross-sections were removed |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Running it, and the conventions a change follows |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Running it, container notes, and what is still unverified |
 | [`notebooks/`](notebooks/) | Point-cloud→hydraulics walkthrough, data exploration, training, SHAP, validation |
 | [`frontend/README.md`](frontend/README.md) | Dashboard structure and the constraints it has to honour |

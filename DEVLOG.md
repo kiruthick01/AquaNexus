@@ -846,7 +846,7 @@ are runtime dependencies, so a build stage would save nothing.
 ✓ docs/HECRAS_GUIDE.md  file-format traps
 ✓ frontend/README.md    dashboard structure and its constraints
 ✓ LICENSE              MIT, added here — pyproject had declared it since day one
-✗ CONTRIBUTING.md      not written — single-author project
+✓ CONTRIBUTING.md      how to run it, and the conventions a change should follow
 ```
 
 **Deployment Options**: `docker compose up` brings up both services (API 8000,
