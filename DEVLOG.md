@@ -73,7 +73,7 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
 - Model beats persistence by only 0.06 R² and loses on MAE; predicted range 3.3–10.1 mg/L against an observed 3.0–17.0, so it cannot flag hypoxic events.
 - HSI labels remain synthetic; only the falsification test constrains them.
 - Neither image has been built. `tests/test_deployment.py` (20 tests) covers what a daemon is not needed for; the base images, Linux wheels, libgomp, the non-root user against a bind mount, nginx's reading of its own config and the HEALTHCHECK loops are unverified. CI's `containers` job is where that gets settled.
-- The frontend bakes its API URL in at build time (Vite substitutes `import.meta.env`), so a deployed bundle cannot be repointed without rebuilding.
+- ~~The frontend bakes its API URL in at build time~~ — **fixed 09-08**: the container entrypoint writes `/config.js` from `$API_BASE_URL` and the page reads it at load, verified by repointing a built bundle in the browser without rebuilding.
 - No auth and no TLS. `/explain` is now cached by state (~15 ms on a repeat) and capped per client, but the limit is per-process, so a shared one needs a gateway. See `docs/DEPLOYMENT.md`.
 - The full debt register is also in `05_model_validation.ipynb` §7, so it travels with the analysis.
 

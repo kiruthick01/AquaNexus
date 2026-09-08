@@ -182,17 +182,45 @@ def test_frontend_serves_the_single_page_router():
     assert "try_files" in config and "/index.html" in config
 
 
-def test_frontend_api_url_is_a_build_argument(frontend_dockerfile):
-    """Vite substitutes import.meta.env at build time.
+def test_frontend_api_url_is_set_at_run_time(frontend_dockerfile):
+    """Regression: the API address used to be baked into the bundle.
 
-    Setting VITE_API_BASE_URL in the runtime environment does nothing to an
-    already-built bundle, so the image has to take it as a build argument or the
-    published app silently talks to localhost.
+    Vite substitutes import.meta.env at build time, so an image built against
+    one backend could never be repointed - every environment needed its own
+    build. The entrypoint writes /config.js from $API_BASE_URL at start-up
+    instead, and the page reads it at load.
     """
-    assert re.search(r"^ARG VITE_API_BASE_URL", frontend_dockerfile, re.MULTILINE)
+    instructions = [line for line in frontend_dockerfile.splitlines()
+                    if not line.lstrip().startswith("#")]
+    assert not any("VITE_API_BASE_URL" in line for line in instructions), (
+        "baking the URL in defeats the runtime config"
+    )
+    assert re.search(r"^ENTRYPOINT", frontend_dockerfile, re.MULTILINE)
+
+    entrypoint = (FRONTEND / "docker-entrypoint.sh").read_text(encoding="utf-8")
+    assert "API_BASE_URL" in entrypoint
+    assert "config.js" in entrypoint
+    assert entrypoint.rstrip().endswith('exec "$@"'), (
+        "the entrypoint must hand over to the image's CMD"
+    )
 
 
-def test_compose_builds_the_frontend_with_a_host_reachable_api(compose):
+def test_runtime_config_is_never_cached():
+    """A cached config.js points the page at the previous deployment's API."""
+    config = (FRONTEND / "nginx.conf").read_text(encoding="utf-8")
+    assert re.search(r"location = /config\.js", config)
+    assert "no-store" in config
+
+
+def test_the_page_loads_the_runtime_config_before_the_bundle():
+    html = (FRONTEND / "index.html").read_text(encoding="utf-8")
+    config_at = html.find("/config.js")
+    bundle_at = html.find("/src/main.tsx")
+    assert config_at != -1, "index.html does not load the runtime config"
+    assert config_at < bundle_at, "config.js must load before the bundle reads it"
+
+
+def test_compose_points_the_frontend_at_a_host_reachable_api(compose):
     """The browser resolves that URL, not the compose network.
 
     `http://api:8000` works between containers and fails in the browser, which
@@ -201,7 +229,7 @@ def test_compose_builds_the_frontend_with_a_host_reachable_api(compose):
     settings = "\n".join(
         line for line in compose.splitlines() if not line.strip().startswith("#")
     )
-    assert "VITE_API_BASE_URL" in settings
+    assert "API_BASE_URL" in settings
     assert "http://api:8000" not in settings
 
 

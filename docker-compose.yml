@@ -24,13 +24,13 @@ services:
       --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src
 
   frontend:
-    build:
-      context: ./frontend
-      args:
-        # Substituted into the bundle at build time; the browser resolves it,
-        # so it must be an address the *host* can reach, not the compose
-        # service name. http://api:8000 would only work from inside the network.
-        VITE_API_BASE_URL: http://localhost:8000
+    build: ./frontend
+    environment:
+      # Read at container start, not baked into the bundle, so this image can be
+      # repointed without rebuilding. The browser resolves it, so it must be an
+      # address the *host* can reach: http://api:8000 would only work from
+      # inside the compose network.
+      API_BASE_URL: http://localhost:8000
     ports:
       - "3000:80"
     depends_on:

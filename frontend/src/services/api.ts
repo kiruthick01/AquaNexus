@@ -21,8 +21,33 @@ import type {
   Target,
 } from "../types";
 
-export const API_BASE: string =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+declare global {
+  interface Window {
+    __AQUANEXUS_CONFIG__?: { apiBaseUrl?: string };
+  }
+}
+
+/**
+ * Where the API lives, resolved at page load rather than at build time.
+ *
+ * Order matters. `VITE_API_BASE_URL` is the local override and wins, because
+ * `.env.local` is how you point a dev server at something else. Otherwise the
+ * value comes from `/config.js`, which a container rewrites at start-up — that
+ * is what lets one built image serve any environment. The final fallback is the
+ * default dev backend.
+ */
+function resolveApiBase(): string {
+  const built = import.meta.env.VITE_API_BASE_URL;
+  if (typeof built === "string" && built.length > 0) return built;
+
+  const runtime =
+    typeof window !== "undefined" ? window.__AQUANEXUS_CONFIG__?.apiBaseUrl : undefined;
+  if (typeof runtime === "string" && runtime.length > 0) return runtime;
+
+  return "http://localhost:8000";
+}
+
+export const API_BASE: string = resolveApiBase();
 
 export class ApiError extends Error {
   readonly status: number;

@@ -59,16 +59,18 @@ package non-editably, so mounting `./src` over `/app/src` would otherwise change
 nothing: imports would still resolve to the copy inside the image, while
 `--reload` restarted on edits that could not take effect.
 
-**The frontend's API URL is a build argument, not an environment variable.**
-Vite substitutes `import.meta.env` when the bundle is built, so a running
-container cannot be repointed:
+**The frontend's API URL is read at run time.** The entrypoint writes
+`/config.js` from `$API_BASE_URL` at container start and the page loads it
+before the bundle, so one built image serves any environment:
 
 ```bash
-docker build --build-arg VITE_API_BASE_URL=https://api.example.com ./frontend
+docker run -e API_BASE_URL=https://api.example.com -p 3000:80 aquanexus-frontend
 ```
 
 It must be an address the **browser** can reach. `http://api:8000` resolves
-inside the compose network and fails in the browser.
+inside the compose network and fails in the browser. nginx serves `config.js`
+with `no-store`, because a cached copy would point the page at the previous
+deployment's API.
 
 ---
 
@@ -122,6 +124,10 @@ Honest accounting of what has actually been checked.
   environment and serving from the installed copy with no source on the path —
   degraded without `DATA_DIR`, and 14/14 smoke checks with it.
 - The frontend build (`npm run build`) and its 22 tests, on every change.
+- The runtime config end to end, by building with no `VITE_API_BASE_URL`,
+  writing `config.js` the way the entrypoint does, serving `dist/` statically
+  and confirming in a browser that rewriting that one file repoints the app
+  without a rebuild.
 
 **Not verified:** `docker build`, either image. The base images, Linux wheels,
 `libgomp`, the non-root user against a bind-mounted volume, the nginx config as

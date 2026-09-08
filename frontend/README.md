@@ -10,9 +10,10 @@ npm run test     # 22 tests
 npm run build    # typecheck + production bundle into dist/
 ```
 
-Point it somewhere else with `VITE_API_BASE_URL` in `.env.local`. Note that Vite
-substitutes it **at build time**, so a built bundle cannot be repointed without
-rebuilding.
+Point it somewhere else with `VITE_API_BASE_URL` in `.env.local`. That is the
+local knob and it wins when set. In a container the address instead comes from
+`$API_BASE_URL`, which the entrypoint writes into `public/config.js` at start-up
+— the page reads it at load, so one built image can serve any environment.
 
 ## What it has to get right
 
