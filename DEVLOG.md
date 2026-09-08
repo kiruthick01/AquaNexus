@@ -76,6 +76,94 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
   - The same runs settle the standing Docker caveat in the other direction: **both images build** and the API container starts, answers `/health` in 4 ms and reports degraded against `/app/data/models/manifest.json` — which independently confirms the `DATA_DIR` fix from Phase 3b.
 - **`scripts/run_hecras.py` implemented** — it had been a `NotImplementedError` placeholder since Phase 1. It runs the 12-discharge sweep and writes the CSV the models are built from, with `--exclude-flagged` for the above.
 
+#### Problems and conflicts, 09-07 → 09-08
+
+Kept because the outcomes above read as though the work went in a straight line,
+and it did not.
+
+**Mistakes worth not repeating**
+
+- **Eight red CI runs went unread.** I wrote "CI has never run" in three separate
+  summaries without ever typing `gh run list`. It had run on every push since the
+  workflow was added, and failed every time. Two real defects were sitting in
+  those logs. *Check the signal before describing it.*
+- **A study that confidently answered the wrong question.** The first version of
+  `constriction_impact.flagged_stations` matched the rendered issue text, and
+  `"0"` matched inside `"12500"` — so it dropped RS 0, a 157 m section, and
+  reported that removing the constrictions changed almost nothing. Reading the
+  `Issue.location` field instead gave the four real stations and *reversed the
+  verdict*. Structured data was available; I scraped the string version of it.
+- **Pushed a commit with failing lint.** Three `I001`s in a new test module. I
+  read the tail of the ruff output and not the exit code.
+- **Mechanically restated numbers into the log's history.** A bulk find/replace
+  updated Phase 2 entries, leaving lines that read `RMSE 1.713 … R² 0.394` —
+  internally inconsistent and historically false. Reverted; see the conflict
+  below.
+- **Asserted a result the numbers contradicted.** The roughness document said the
+  model *amplifies* hydraulic error. Computed properly — depth moves 6.4%, the
+  prediction 3.7% — it damps it. The prose had been written beside the numbers
+  rather than derived from them.
+- **Built the generic dashboard first.** The design pass found the interface was
+  the SaaS-card default: identical rounded cards, one shadow under each,
+  tracked-out uppercase labels, dot-joined meta strings. Three of the named tells
+  for AI-generated design, none of them a decision.
+- **Pointed at throwaway paths.** Sent the user Chrome's temp screenshot
+  directory when the committed copies were in `docs/figures/`.
+
+**Defects that were invisible on this machine**
+
+- `openpyxl` used by the loader and never declared — installed here as someone
+  else's transitive dependency, so every loader test passed locally and every one
+  failed on a clean checkout.
+- `/explain` and `/scenario_run` resolved the model before validating the
+  request, so an empty state got 422 with models loaded and 503 without. Only the
+  422 branch is reachable here; CI has no artefacts and took the other.
+- `reach_top_width` NaN on every API request since Phase 3a — no field of
+  `EnvironmentalState` maps to it, so the linear pipeline imputed the training
+  median: the same channel width at 1 m³/s as at 70.
+- After the CSS rewrite three components still referenced renamed variables, so
+  the SHAP chart and heatmap drew with undefined colours; and `.stat-row` was
+  deleted from the stylesheet while three files still used it. Both were visible
+  in a browser and invisible to 377 passing tests.
+- CORS rejected `http://127.0.0.1:3000` while allowing `localhost:3000` — a
+  browser treats them as different origins, and the page reported only "cannot
+  reach the API".
+
+**Conflicts that needed a judgement, not a fix**
+
+- **Fixing the data made every metric worse.** Removing four bad cross-sections
+  cost 0.05 R², a third of the apparent value of the whole hydraulic pipeline,
+  and shrank the margin over persistence from +0.057 to +0.009. Keeping known-bad
+  geometry because the numbers flattered it was never an option, but it is worth
+  recording that the honest choice and the good-looking one pointed in opposite
+  directions.
+- **A sensitivity study is only as current as its inputs.** The roughness result
+  was computed against the shipped model; correcting the geometry moved it from
+  64% of RMSE to 15% without a line of its code changing. Derived documents need
+  re-running when their inputs move, and nothing enforces that.
+- **A log versus a current document.** Restating today's numbers throughout the
+  repo is correct; doing it to yesterday's log entries is falsification. Resolved
+  as: history stays as written, present-tense sections (state, debt, metrics,
+  checklist) are updated, and a dated entry records what changed and why.
+- **`--no-run` could not be used after a normal run**, because the script deleted
+  its own working directories by default. The flag existed to reuse a cache the
+  default behaviour destroyed.
+
+**Tooling friction, for whoever hits it next**
+
+- Long heredocs into `python -` fail unpredictably in this shell (`unexpected EOF`
+  on content with no unbalanced quotes). Use the file-write tool for anything
+  substantial.
+- Escaping `
+` inside a heredoc'd Python string replacement silently produces a
+  literal newline and the match fails. Anchor on unique short substrings instead.
+- Windows console is cp1252: anything printing 綾瀬川 needs
+  `PYTHONIOENCODING=utf-8` or it dies in the encoder, not in the logic.
+- Browser automation: clicking by element reference immediately after a route
+  change often does not register. Coordinate clicks after a screenshot do.
+- `vitest` 3 bundles its own `vite`, which conflicts with `vite` 8's plugin types.
+  Upgrading to `vitest` 5 resolves it; pinning `vite` down would too.
+
 ### Next session — pick up here
 
 **State:** All four phases done, plus a round of open-item work. 376 backend tests + 22 frontend, lint clean, all pushed. The models were retrained on corrected geometry (49 sections) on 09-08 — R² 0.394, RMSE 1.785.
@@ -989,7 +1077,38 @@ Phase 2b, in the README and the methodology doc.
 **Result**: ✓ RETRACTED — corrected in three documents rather than quietly
 dropped.
 
-### Challenge 5: an explanation endpoint that explained nothing
+### Challenge 5: the fix that made the numbers worse
+**Problem**: Four cross-sections had been flagged as cut through bank since
+Phase 1c and kept, because dropping them was a judgement nobody had measured.
+Measured, they were worth 64% of the model's error — so they had to go. Removing
+them cost 0.05 R², shrank the margin over persistence from +0.057 to +0.009, and
+cut the central claim about the physics-informed step from +0.062 R² to +0.019.
+**Solution Attempted**: Removed them anyway; retrained; restated every published
+number, figure and caveat against the corrected geometry.
+**Result**: ✓ RESOLVED — and worth stating plainly: the honest choice and the
+flattering one pointed in opposite directions, which is the whole reason not to
+select geometry by which version scores better.
+**Notes**: The roughness study had to be re-run as a consequence and fell from
+64% of RMSE to 15%. Derived documents inherit their inputs' staleness, and
+nothing in the repository enforces that.
+
+### Challenge 6: eight red CI runs, unread
+**Problem**: CI failed on every push from the day it was added. I wrote "CI has
+never run" in three summaries without checking, so two real defects sat in the
+logs for a day: an undeclared `openpyxl`, and request validation ordered behind
+the model lookup so a malformed request returned 422 or 503 depending on server
+state.
+**Solution Attempted**: `gh run list`. Then fixed both, pinned both with tests,
+and reproduced CI's shape locally by pointing `DATA_DIR` at an empty directory.
+**Result**: ✓ RESOLVED — CI green on all four jobs.
+**Notes**: Both defects were unreachable on this machine — one because a
+dependency happened to be installed, the other because the artefacts always
+exist here. That is precisely the class of bug CI exists to catch, and precisely
+the value it cannot deliver while nobody reads it. It also settled the standing
+container caveat in the other direction: both images build and the API container
+serves.
+
+### Challenge 7: an explanation endpoint that explained nothing
 **Problem**: `/explain` returned 0.0 for every feature. The SHAP background was
 the request row itself, so baseline equalled prediction. It was well-formed,
 summed correctly, and said nothing — and a test asserting the sum passed on
@@ -1007,7 +1126,8 @@ explainer once per model.
    different label provenance made every downstream decision clearer: what to
    test, what to serve, what to put on a badge in the UI.
 3. **Baselines are the finding.** Persistence beats this model on MAE. Without
-   that row the R² of 0.442 would have read as competence.
+   that row the R² would have read as competence — and after the geometry was
+   corrected the margin fell to +0.009, which only the baseline makes legible.
 4. **Tests can pass on nothing.** The contributions-sum test passed while every
    contribution was zero. Assert that a thing is non-degenerate, not just
    self-consistent.
@@ -1021,8 +1141,20 @@ explainer once per model.
    corrected, which moved it from 64% of the model's error to 15% — the first
    answer was mostly the bad cross-sections talking. An unquantified limitation
    is an unranked one, and a study is only as current as the artefacts under it.
-7. **For next version**: a gauged rating curve first — the sensitivity study says
-   so — then re-cut the four bad cross-sections, then low-flow observations.
+7. **Read the signal, do not describe it.** CI had been failing for a day while
+   I wrote that it had never run. The cost of checking was one command; the cost
+   of not checking was two defects shipped and three summaries that were wrong.
+8. **Derived documents go stale silently.** Two sensitivity studies were computed
+   against artefacts that later changed. Nothing failed, nothing warned — the
+   documents simply described a model that no longer existed. Anything generated
+   from an artefact needs re-running when that artefact moves, and the repo has
+   no mechanism for noticing.
+9. **A log and a document have different obligations.** Current documents must be
+   restated when the numbers change; a log must not, or it stops being evidence
+   of what was believed when.
+10. **For next version**: a gauged rating curve first — the sensitivity study
+    says so — then low-flow observations, then the Naka reach as a genuine
+    held-out river.
 
 ## Next Steps (Beyond PoC)
 
