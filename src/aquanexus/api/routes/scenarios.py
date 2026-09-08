@@ -75,11 +75,9 @@ def scenario_run(request: ScenarioRequest) -> ScenarioResponse:
     A caller who sets depth or velocity explicitly is taken at their word and
     nothing is re-derived for them.
     """
-    try:
-        model = registry.get(request.target)
-    except KeyError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
+    # Validate the request before resolving the model - see the note in
+    # routes/explanations.py. What is wrong with a request should not depend on
+    # what the server happens to have loaded.
     baseline = request.baseline.model_dump(exclude_none=True)
     if not baseline:
         raise HTTPException(status_code=422, detail="baseline state is empty")
@@ -90,6 +88,11 @@ def scenario_run(request: ScenarioRequest) -> ScenarioResponse:
             status_code=422,
             detail=f"cannot modify field(s) absent from the baseline: {sorted(unknown)}",
         )
+
+    try:
+        model = registry.get(request.target)
+    except KeyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     scenario = dict(baseline)
     applied: dict[str, float] = {}

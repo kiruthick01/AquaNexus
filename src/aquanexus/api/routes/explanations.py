@@ -55,14 +55,17 @@ def explain(request: PredictionRequest,
     model the hydraulic features are all derived from discharge and move
     together.
     """
+    # Validate the request before resolving the model. The other order made the
+    # answer depend on server state: an empty state got 422 with models loaded
+    # and 503 without, so a caller could not tell whether the fault was theirs.
+    state = request.state.model_dump(exclude_none=True)
+    if not state:
+        raise HTTPException(status_code=422, detail="state is empty")
+
     try:
         model = registry.get(request.target)
     except KeyError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-    state = request.state.model_dump(exclude_none=True)
-    if not state:
-        raise HTTPException(status_code=422, detail="state is empty")
 
     features = registry.build_features(state, model)
     if model.background is None:

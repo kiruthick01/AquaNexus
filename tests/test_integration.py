@@ -388,6 +388,33 @@ def test_missing_models_degrade_rather_than_crash(tmp_path, isolated_registry):
         assert response.json()["detail"], path
 
 
+def test_a_bad_request_is_a_bad_request_even_when_degraded(tmp_path,
+                                                          isolated_registry):
+    """Regression: the answer depended on what the server had loaded.
+
+    An empty state returned 422 with models loaded and 503 without, because the
+    routes resolved the model before validating the request. A caller could not
+    tell whether the fault was theirs. CI caught it - it runs without artefacts,
+    so it exercised the path this machine never does.
+    """
+    isolated_registry.models.clear()
+    isolated_registry.error = None
+    isolated_registry.load(models_dir=tmp_path)
+    assert not isolated_registry.ready
+
+    client = TestClient(app)
+
+    empty = client.post("/explain", json={"target": "dissolved_oxygen", "state": {}})
+    assert empty.status_code == 422, "an empty state is the caller's problem"
+
+    unmodifiable = client.post("/scenario_run", json={
+        "scenario_name": "x", "target": "dissolved_oxygen",
+        "baseline": STATE, "modifications": {"nonexistent_field": -0.2},
+    })
+    assert unmodifiable.status_code == 422
+    assert "nonexistent_field" in unmodifiable.json()["detail"]
+
+
 # ---------------------------------------------------------------------------
 # Middleware and the error boundary
 # ---------------------------------------------------------------------------
