@@ -218,14 +218,14 @@ def figure_ablation():
     """Does the hydraulic model earn its place?"""
     sets = ["temperature\nonly", "+ season", "+ raw\ndischarge",
             "+ HEC-RAS\nhydraulics"]
-    r2 = [0.328, 0.312, 0.293, 0.355]
+    r2 = [0.328, 0.312, 0.293, 0.312]
     colours = ["#bdc3c7", "#bdc3c7", "#bdc3c7", ACCENT]
 
     fig, ax = plt.subplots(figsize=(7, 3.2))
     bars = ax.bar(sets, r2, color=colours, alpha=0.9)
     ax.set_ylabel("R² (grouped CV)")
-    ax.set_ylim(0.25, 0.38)
-    ax.set_title("Raw discharge hurts; the hydraulic transformation of it helps",
+    ax.set_ylim(0.25, 0.36)
+    ax.set_title("The hydraulic transformation recovers what raw discharge costs",
                  loc="left", fontweight="bold")
     for bar, value in zip(bars, r2, strict=True):
         ax.text(bar.get_x() + bar.get_width() / 2, value + 0.003,

@@ -16,7 +16,7 @@ call, what the numbers mean, and where they should not be trusted.
 | unit | mg/L | index, 0–1 |
 | model | Ridge regression | XGBoost |
 | trained on | 138 observations, 4 stations | 4,717 rows (53 sections × observations) |
-| cross-validated R² | **0.44** (whole stations held out) | 0.99 — *function recovery, not skill* |
+| cross-validated R² | **0.39** (whole stations held out) | 0.99 — *function recovery, not skill* |
 
 `hsi` will always look like the better model. It is not: its labels are computed
 by `aquanexus.data.synthetic`, so a high score measures how well a regressor

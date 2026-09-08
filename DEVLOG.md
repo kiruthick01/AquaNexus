@@ -56,9 +56,27 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
   - Added the MIT LICENSE file — pyproject had declared MIT since day one with no licence text in the repo.
 
 
+### 2026-09-08
+- **Scenario hydraulics fixed.** `/scenario_run` re-interpolates depth, velocity and width from the sweep at the scenario discharge. Also found `reach_top_width` had been NaN on every API request since Phase 3a — no caller field maps to it — so the linear pipeline was imputing the training median, the same width at 1 m³/s as at 70.
+- **`/explain` cached and capped.** A repeated state answers in ~15 ms instead of ~190; a new one spends a token from a per-client bucket. Cache hits cost nothing, because the limit protects CPU.
+- **Frontend API address moved to runtime.** The entrypoint writes `/config.js` from `$API_BASE_URL`; one built image now serves any environment. Verified by repointing a built bundle in the browser.
+- **Manning's n quantified.** Against the *flawed* geometry it read 1.10 mg/L, 64% of the model's error; re-run after the geometry correction below it is 0.26 mg/L, **15%**. The first number was mostly the bad sections talking. Uncalibrated is now at least ranked, and ranked below the geometry itself.
+- **Four bad cross-sections measured, then removed — and the model got worse.** RS 12500/14000/18000/24000 were cut through bank where the centreline wandered. Excluding them moves predictions 1.10 mg/L at worst, so they came out and everything was retrained on 49 sections:
+
+| | 53 sections (flawed) | 49 sections (shipped) |
+|---|---|---|
+| RMSE | 1.713 | **1.785** |
+| R² | 0.442 | **0.394** |
+| margin over persistence | +0.057 R² | **+0.009 R²** |
+| low-flow bias | −2.011 | **−2.256 mg/L** |
+| hydraulic gain over raw discharge | +0.062 R² | **+0.019 R²** |
+
+  Every headline in the project got weaker, including the central claim about the physics-informed step, which the flawed geometry had inflated threefold. The numbers above replace the Phase 2 ones throughout README, ML_METHODOLOGY, the API caveats, the figures and the dashboard; the Phase 2 entries in this log are left as written, because they record what was true when they were written.
+- **`scripts/run_hecras.py` implemented** — it had been a `NotImplementedError` placeholder since Phase 1. It runs the 12-discharge sweep and writes the CSV the models are built from, with `--exclude-flagged` for the above.
+
 ### Next session — pick up here
 
-**State:** All four phases done. 355 backend tests + 22 frontend, lint clean, all pushed.
+**State:** All four phases done, plus a round of open-item work. 376 backend tests + 22 frontend, lint clean, all pushed. The models were retrained on corrected geometry (49 sections) on 09-08 — R² 0.394, RMSE 1.785.
 
 **Next, in order of value:**
 1. Watch the first CI run: the `containers` job builds both images for the first time. Expect it to be where the remaining Docker unknowns surface.
@@ -66,11 +84,11 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
 3. Optional polish: dark mode; a shareable permalink for a state; caching `/explain` by state, since it is ~200 ms of SHAP per call.
 
 **Known debt:**
-- 4 cross-sections cut through constrictions (RS 12500/14000/18000/24000) — flagged by validator, not excluded.
-- Manning's n uncalibrated — **quantified 09-08** (`docs/MANNING_SENSITIVITY.md`): across the plausible range 0.025–0.050 the predictions move up to 1.10 mg/L, **64% of the model's 1.713 RMSE**. Still uncalibrated, but no longer unquantified: a gauged rating curve for this reach is now the single highest-value missing measurement.
+- ~~4 cross-sections cut through constrictions~~ — **excluded 09-08** after measuring their effect (1.10 mg/L, 64% of RMSE). The sweep, both models and every documented number are now on 49 sections.
+- Manning's n uncalibrated — **quantified 09-08** (`docs/MANNING_SENSITIVITY.md`): across 0.025–0.050 the predictions move up to 0.26 mg/L, **15% of the model's 1.785 RMSE**. Still uncalibrated, but ranked: a gauged rating curve remains the most valuable missing measurement, and this says it is worth less than the geometry fix already made.
 - ~~`/scenario_run` holds depth/velocity/width fixed when discharge changes~~ — **fixed 09-08**: the hydraulics are re-interpolated from `ayase_flow_sweep.csv` at the scenario discharge, and `reach_top_width`, which no caller field could ever supply, no longer falls back to an imputed median on every request.
-- Scenario answers below ~2 m³/s should not be believed regardless of that fix — the model is biased −2 mg/L there and drought mechanisms (heat, residence time, concentrated load) are not in the feature set.
-- Model beats persistence by only 0.06 R² and loses on MAE; predicted range 3.3–10.1 mg/L against an observed 3.0–17.0, so it cannot flag hypoxic events.
+- Scenario answers below ~2 m³/s should not be believed regardless — the model is biased −2.26 mg/L there and drought mechanisms (heat, residence time, concentrated load) are not in the feature set.
+- Model beats persistence by **0.009 R²** and loses on MAE; predicted range 4.2–10.2 mg/L against an observed 3.0–17.0, so it cannot flag hypoxic events. Both got worse when the geometry was corrected.
 - HSI labels remain synthetic; only the falsification test constrains them.
 - Neither image has been built. `tests/test_deployment.py` (20 tests) covers what a daemon is not needed for; the base images, Linux wheels, libgomp, the non-root user against a bind mount, nginx's reading of its own config and the HEALTHCHECK loops are unverified. CI's `containers` job is where that gets settled.
 - ~~The frontend bakes its API URL in at build time~~ — **fixed 09-08**: the container entrypoint writes `/config.js` from `$API_BASE_URL` and the page reads it at load, verified by repointing a built bundle in the browser without rebuilding.
@@ -997,8 +1015,10 @@ explainer once per model.
 6. **Quantify what you cannot fix.** Manning's n could not be calibrated, so it
    sat in the limitations as "unquantified systematic error" for three days.
    Re-running the sweep across the plausible range took twenty minutes and
-   turned it into a number: 64% of the model's RMSE. An unquantified limitation
-   is an unranked one, and unranked limitations cannot be prioritised.
+   turned it into a number. It also had to be re-run after the geometry was
+   corrected, which moved it from 64% of the model's error to 15% — the first
+   answer was mostly the bad cross-sections talking. An unquantified limitation
+   is an unranked one, and a study is only as current as the artefacts under it.
 7. **For next version**: a gauged rating curve first — the sensitivity study says
    so — then re-cut the four bad cross-sections, then low-flow observations.
 

@@ -20,7 +20,8 @@ export default function About() {
         </p>
         <p>
           The study reach is 27.5 km of the Ayase River (綾瀬川) in Saitama,
-          described by 53 cross-sections extracted from 89 point-cloud tiles.
+          described by 49 cross-sections — four of the 53 extracted were cut
+          through bank where the centreline wandered, and are excluded.
         </p>
       </section>
 
@@ -53,7 +54,7 @@ export default function About() {
         <p>
           <strong>Dissolved oxygen</strong> is trained on 138 real measurements
           from four stations, cross-validated with whole stations held out. R²
-          0.44, RMSE 1.71 mg/L. Ridge regression beats both tree models at this
+          0.39, RMSE 1.79 mg/L. Ridge regression beats both tree models at this
           sample size, which is the opposite of what the project plan assumed.
         </p>
         <p>
@@ -82,7 +83,7 @@ export default function About() {
           </li>
           <li>
             <strong>The model cannot reach the extremes.</strong> Observed oxygen
-            spans 3.0–17.0 mg/L; out-of-fold predictions span 3.3–10.1. It cannot
+            spans 3.0–17.0 mg/L; out-of-fold predictions span 4.2–10.2. It cannot
             flag a hypoxic event.
           </li>
           <li>
@@ -99,9 +100,10 @@ export default function About() {
           <li>
             <strong>Uncalibrated roughness.</strong> No gauged rating curve
             exists for this reach, so Manning's n was set from a textbook. Across
-            its plausible range the predictions move by up to 1.10 mg/L — 64% of
+            its plausible range the predictions move by up to 0.26 mg/L — 15% of
             the model's error — which makes one rating curve the most valuable
-            measurement missing from the project.
+            measurement still missing, though a smaller problem than the geometry
+            already corrected.
           </li>
         </ul>
       </section>

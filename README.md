@@ -112,7 +112,10 @@ gradient is what makes it worth modelling — there is a real signal to find.
 
 ![Bed profile of the Ayase River reach](docs/figures/reach_profile.png)
 
-**27.5 km, 53 cross-sections**, extracted from 89 point-cloud tiles. The bed falls
+**27.5 km, 49 cross-sections** (of 53 extracted; four were cut through bank where
+the centreline wandered and are excluded — see
+[`docs/CONSTRICTION_IMPACT.md`](docs/CONSTRICTION_IMPACT.md)), from 89 point-cloud
+tiles. The bed falls
 **10.8 m — a gradient of 0.39 m/km**, which is the sanity check that the reach hangs
 together rather than being 53 unrelated sections.
 
@@ -164,9 +167,9 @@ negative rather than clipping it — supersaturation is itself a eutrophication 
 flowchart LR
     subgraph REAL["dissolved_oxygen — trustworthy"]
         R1["Labels: real measurements"]
-        R2["R² 0.442 · RMSE 1.71 mg/L"]
+        R2["R² 0.394 · RMSE 1.79 mg/L"]
         R3["Grouped CV, stations held out"]
-        R4["⚠ Beats 'no change' by 0.06 R²"]
+        R4["⚠ Beats 'no change' by 0.009 R²"]
     end
     subgraph SYNTH["hsi — demonstration only"]
         S1["Labels: generated here"]
@@ -195,10 +198,10 @@ overfits. The project specification assumed XGBoost would win; on this dataset i
 does not, and that is reported as found.
 
 **The persistence baseline is the finding.** "Same oxygen as last month at this
-station" scores R² 0.385 against the model's 0.442 — and *beats it on MAE*. The model
+station" scores R² 0.385 against the model's 0.394 — and *beats it on MAE*. The model
 earns its place by working where no previous sample exists and generalising to unseen
 stations, neither of which persistence can do. But the honest headline is
-*"marginally better than assuming no change"*, not *"R² 0.44"*.
+*"barely better than assuming no change"*, not *"R² 0.39"*.
 
 ### Does the hydraulic model earn its place?
 
@@ -208,11 +211,14 @@ This is the project's central claim, tested directly:
 
 - Adding **raw discharge** to temperature *hurts* (−0.019 R²)
 - Adding **the hydraulic model's transformation** of that same discharge — depth,
-  velocity, width, Froude — *helps* (+0.062)
+  velocity, width, Froude — recovers most of it (+0.019)
 
-So the physics-informed step carries information the raw driver does not. The effect
-is **modest and reported as modest**; hydraulics alone predict nothing (R² −0.26),
-because dissolved oxygen is thermally driven first.
+So the physics-informed step carries information the raw driver does not, and that is
+the whole of the claim. It does not beat temperature on its own (0.312 against 0.328),
+hydraulics alone predict nothing (R² −0.31), and simply adding air temperature — free,
+no hydraulic model — is worth more (+0.073). **The effect is real and small, and the
+first version of this figure overstated it**: on the geometry that included four bad
+cross-sections it read +0.062, three times what the corrected geometry supports.
 
 ### Where it fails
 
@@ -416,9 +422,9 @@ Stated here rather than discovered later:
 | Limitation | Detail |
 |---|---|
 | **Small sample** | The real target has **n = 138** across 4 stations. Everything should be read with that attached. |
-| **Barely beats persistence** | +0.06 R², and loses on MAE. |
+| **Barely beats persistence** | +0.009 R², and loses on MAE. |
 | **Unreliable at low flow** | Under-predicts oxygen by ~2 mg/L below ≈2 m³/s. |
-| **Manning's *n* is assumed** | 0.035 channel / 0.06 overbank, not calibrated — no gauged rating curve exists for this reach. **Measured, not hand-waved:** across the plausible range 0.025–0.050 the predictions move up to 1.10 mg/L, 64% of the model's RMSE. See [`docs/MANNING_SENSITIVITY.md`](docs/MANNING_SENSITIVITY.md). |
+| **Manning's *n* is assumed** | 0.035 channel / 0.06 overbank, not calibrated — no gauged rating curve exists for this reach. **Measured, not hand-waved:** across the plausible range 0.025–0.050 the predictions move up to 0.26 mg/L, 15% of the model's RMSE. See [`docs/MANNING_SENSITIVITY.md`](docs/MANNING_SENSITIVITY.md). |
 | **HSI labels are synthetic** | Generated here from response curves. High accuracy = function recovery. |
 | **Biology is validation only** | n = 6 for the Ayase. Too small to train on; used as an independent check. |
 | **4 sections flagged** | Cut through constrictions or structures; listed by the validator, not yet excluded. |

@@ -8,12 +8,12 @@ Manning's n was never calibrated - no gauged rating curve exists for this reach 
 
 | n | reach depth (m) | velocity (m/s) | top width (m) | depth vs 0.035 |
 |---|---|---|---|---|
-| 0.025 | 2.569 | 0.415 | 58.6 | -3.0% |
-| 0.030 | 2.591 | 0.402 | 59.4 | -2.2% |
-| 0.035 **(shipped)** | 2.650 | 0.371 | 61.2 | — |
-| 0.040 | 2.670 | 0.363 | 61.7 | +0.8% |
-| 0.045 | 2.689 | 0.356 | 62.0 | +1.5% |
-| 0.050 | 2.748 | 0.337 | 63.2 | +3.7% |
+| 0.025 | 2.590 | 0.394 | 58.3 | -2.9% |
+| 0.030 | 2.610 | 0.383 | 58.9 | -2.1% |
+| 0.035 **(shipped)** | 2.667 | 0.355 | 60.3 | — |
+| 0.040 | 2.685 | 0.350 | 60.8 | +0.7% |
+| 0.045 | 2.701 | 0.346 | 61.1 | +1.3% |
+| 0.050 | 2.761 | 0.316 | 62.2 | +3.5% |
 
 ## What it does to the predictions
 
@@ -21,17 +21,17 @@ Every observation re-predicted with the hydraulics each roughness produces, chem
 
 | n | mean predicted DO (mg/L) | mean shift vs 0.035 | worst shift |
 |---|---|---|---|
-| 0.025 | 6.346 | 0.717 | 1.098 |
-| 0.030 | 6.505 | 0.558 | 0.837 |
-| 0.035 **(shipped)** | 7.063 | 0.000 | 0.000 |
-| 0.040 | 7.190 | 0.127 | 0.284 |
-| 0.045 | 7.278 | 0.215 | 0.445 |
-| 0.050 | 7.584 | 0.521 | 0.812 |
+| 0.025 | 6.922 | 0.143 | 0.260 |
+| 0.030 | 6.948 | 0.118 | 0.232 |
+| 0.035 **(shipped)** | 7.065 | 0.000 | 0.000 |
+| 0.040 | 7.080 | 0.015 | 0.048 |
+| 0.045 | 7.090 | 0.025 | 0.072 |
+| 0.050 | 7.160 | 0.095 | 0.137 |
 
 ## Reading this
 
-Across the plausible range the predictions move by 0.717 mg/L on average and 1.098 mg/L at worst, against a cross-validated RMSE of 1.713 mg/L. **The roughness choice accounts for up to 64% of the model's error.** This is a first-order limitation, not a footnote.
+Across the plausible range the predictions move by 0.143 mg/L on average and 0.260 mg/L at worst, against a cross-validated RMSE of 1.785 mg/L. **The roughness choice accounts for up to 15% of the model's error.** This is small beside the model's own error; other things limit the project first.
 
-Note the asymmetry between the two tables. The hydraulics barely move - a few percent of depth across the whole range - while the predictions move by a large fraction of an mg/L. The model amplifies small hydraulic changes, because its hydraulic features are collinear and carry large offsetting coefficients. A small error in depth does not stay small by the time it reaches the answer.
+Depth moves 6.4% across the whole range while the prediction moves 3.7% (0.260 mg/L) - the model **damps** the hydraulic uncertainty rather than amplifying it, because it leans on temperature far more heavily than on the channel. That is also why the hydraulic pipeline adds so little: the same weakness shows up as a limitation and as a protection.
 
 What would settle it: a gauged stage-discharge record for this reach. One rating curve would replace this whole range with a calibrated value, and is the single highest-value measurement missing from the project.

@@ -188,7 +188,7 @@ survive refutation.
 
 The dataset (`aquanexus.data.dataset`) joins simulated hydraulics to observed
 chemistry through the discharge measured alongside each water sample: 7,314 rows,
-53 cross-sections × 138 observations, 26 features.
+49 cross-sections × 138 observations, 26 features (four sections excluded, see below).
 
 Benchmark on a **grouped** split (whole observations held out):
 
@@ -226,7 +226,7 @@ Two consequences worth stating plainly:
    and shear stress carry 89% of feature importance; dissolved oxygen 4%. Within
    one observation the HSI standard deviation is 0.244, against 0.134 between
    observation means — geometry varies more than chemistry does. That is an
-   artefact of the join: 53 sections span depths of 0.1–5.6 m at one discharge,
+   artefact of the join: 49 sections span depths of 0.1–5.6 m at one discharge,
    while chemistry is held constant along the reach.
 2. **The depth response is tight relative to the reach.** With an optimum of
    1.0 m and a tolerance of 0.8 m, the deeper sections score near zero, pulling
@@ -264,9 +264,9 @@ stop mattering.
 
 | model | RMSE (mg/L) | MAE | R² | skill |
 |---|---|---|---|---|
-| **Ridge (linear)** | **1.713** | 1.232 | **0.442** | 0.442 |
-| random forest | 1.879 | 1.417 | 0.329 | 0.329 |
-| xgboost | 1.904 | 1.409 | 0.311 | 0.311 |
+| **Ridge (linear)** | **1.785** | 1.274 | **0.394** | 0.394 |
+| random forest | 1.884 | 1.425 | 0.325 | 0.325 |
+| xgboost | 1.909 | 1.408 | 0.307 | 0.307 |
 | DO saturation (physics) | 2.900 | 2.577 | −0.598 | −0.598 |
 | mean (floor) | 2.294 | 1.779 | 0.000 | 0.000 |
 
@@ -293,8 +293,8 @@ Ridge, same grouped CV:
 | temperature only | 1.880 | 0.328 | — |
 | + season | 1.902 | 0.312 | −0.016 |
 | + discharge | 1.929 | 0.293 | −0.019 |
-| **+ hydraulics (HEC-RAS)** | **1.843** | **0.355** | **+0.062** |
-| hydraulics only | 2.570 | −0.256 | — |
+| **+ hydraulics (HEC-RAS)** | **1.902** | **0.312** | **+0.019** |
+| hydraulics only | 2.629 | −0.313 | — |
 
 **Modest, but real, and the shape of it is the interesting part.** Adding raw
 discharge *hurts* (−0.019). Adding the hydraulic model's transformation of that
@@ -397,6 +397,36 @@ These are partial-dependence curves: they describe what the model does, not what
 the river does. Holding correlated features at their median produces combinations
 that may never occur.
 
+## The four flagged cross-sections, and what removing them cost
+
+`scripts/constriction_impact.py`, full results in `CONSTRICTION_IMPACT.md`.
+
+Four sections — RS 12500, 14000, 18000, 24000 — were cut where the centreline
+wandered off the channel, giving channels of 11–37 m against neighbours of
+34–155 m. They were flagged from Phase 1c and kept, because dropping them was a
+judgement nobody had measured.
+
+Measured, it turned out to matter: excluding them moves predictions by 1.10 mg/L
+at worst, 64% of the model's error. **They are excluded now, and every number in
+this document is computed on the remaining 49.**
+
+The correction made the model look *worse*, on every axis:
+
+| | 53 sections (flawed) | 49 sections (shipped) |
+|---|---|---|
+| RMSE | 1.713 | **1.785** |
+| R² | 0.442 | **0.394** |
+| margin over persistence | +0.057 R² | **+0.009 R²** |
+| low-flow bias | −2.011 mg/L | **−2.256 mg/L** |
+| predicted range | 3.3–10.1 | **4.2–10.2** |
+| hydraulic gain over raw discharge | +0.062 R² | **+0.019 R²** |
+
+That direction is the point. The four bad sections were adding structure the
+model could fit, and removing them took away a third of the apparent value of
+the entire hydraulic pipeline. A metric that improves when you fix your data is
+pleasant; one that degrades is informative, and choosing geometry by which
+version scores better would have been the actual error.
+
 ## Manning's n — how much the uncalibrated roughness is worth
 
 `scripts/manning_sensitivity.py`, full results in `MANNING_SENSITIVITY.md`.
@@ -414,13 +444,17 @@ the same 12-discharge sweep across 0.025–0.050 puts a number on that choice.
 | 0.045 | 2.689 m | 0.215 | 0.445 |
 | 0.050 | 2.748 m | 0.521 | 0.812 |
 
-**Up to 64% of the model's 1.713 mg/L RMSE comes from a constant nobody
-measured.** The asymmetry is the interesting part: depth moves only a few
-percent across the whole range while the predictions move by a large fraction of
-an mg/L. The hydraulic features are collinear and carry large offsetting
-coefficients, so a small error in depth does not stay small by the time it
-reaches the answer — the same collinearity that makes individual SHAP ranks
-untrustworthy also amplifies hydraulic error.
+**Up to 15% of the model's 1.785 mg/L RMSE comes from a constant nobody
+measured** — 0.26 mg/L at worst. Depth moves 6.4% across the whole range while
+the prediction moves 3.7%, so the model *damps* the hydraulic uncertainty rather
+than amplifying it: it leans on temperature far more heavily than on the
+channel. The same weakness that makes the hydraulic pipeline add so little also
+protects the answer from the roughness being wrong.
+
+Run against the earlier 53-section geometry this study read 64%. Almost all of
+that was the four bad cross-sections, not the roughness — which is why it was
+re-run after they were removed, and why a sensitivity study is only as current
+as the artefacts underneath it.
 
 This does not calibrate anything. It ranks the problem: one gauged
 stage-discharge record for this reach would replace the range with a value, and
@@ -432,19 +466,19 @@ is worth more than any modelling change currently available.
 
 | model | RMSE | MAE | R² | skill |
 |---|---|---|---|---|
-| **linear (Ridge)** | **1.713** | 1.232 | **0.442** | 0.442 |
+| **linear (Ridge)** | **1.785** | 1.274 | **0.394** | 0.394 |
 | **persistence** | 1.818 | **1.213** | 0.385 | 0.385 |
-| random_forest | 1.879 | 1.417 | 0.329 | 0.329 |
-| xgboost | 1.904 | 1.409 | 0.311 | 0.311 |
+| random_forest | 1.884 | 1.425 | 0.325 | 0.325 |
+| xgboost | 1.909 | 1.408 | 0.307 | 0.307 |
 | mean (floor) | 2.294 | 1.779 | 0.000 | 0.000 |
-| hydraulic-only | 2.467 | 1.862 | −0.157 | −0.157 |
+| hydraulic-only | 2.572 | 1.870 | −0.258 | −0.258 |
 
 ### The result that should temper everything else
 
-**The model beats persistence by 0.057 R² — and loses to it on MAE.**
+**The model beats persistence by 0.009 R² — and loses to it on MAE.**
 
 "Same dissolved oxygen as last month at this station" scores R² 0.385 against the
-model's 0.442, with a *lower* median error (1.213 vs 1.232 mg/L). For a slowly
+model's 0.394, with a *lower* median error (1.213 vs 1.274 mg/L). For a slowly
 varying quantity sampled monthly that is a strong baseline, and it is the one the
 spec's comparison table would have omitted.
 

@@ -57,7 +57,7 @@ OVERBANK_RATIO = 0.06 / 0.035
 
 #: The shipped model's cross-validated RMSE, for putting the shift in
 #: proportion. From docs/ML_METHODOLOGY.md.
-RMSE = 1.713
+RMSE = 1.785
 
 #: The discharges the model interpolates between, from the shipped sweep.
 DISCHARGES = (0.17, 0.3, 0.51, 0.89, 1.55, 2.69, 4.67, 8.1, 14.07, 24.44,
@@ -231,6 +231,30 @@ def report(means: pd.DataFrame, shifts: pd.DataFrame) -> str:
         typical = shifts["mean_abs_shift"].max() if "mean_abs_shift" in shifts else np.nan
         share = 100 * worst / RMSE if np.isfinite(worst) else float("nan")
 
+        # How the hydraulic movement compares with the prediction movement -
+        # asserted in an earlier version, computed here, because retraining on
+        # corrected geometry changed the answer from "amplified" to "damped".
+        depth_span = (at_median["depth"].max() - at_median["depth"].min())
+        depth_pct = 100 * depth_span / at_median["depth"].median()
+        # Like for like: how far each moves as a fraction of its own level.
+        level = float(shifts["mean_prediction"].median())
+        prediction_pct = 100 * worst / level if level else float("nan")
+        amplification = (
+            f"Depth moves {depth_pct:.1f}% across the whole range and the "
+            f"prediction moves {prediction_pct:.1f}% ({worst:.3f} mg/L) with it - "
+            "the model **amplifies** hydraulic uncertainty. Its hydraulic "
+            "features are collinear and carry large offsetting coefficients, so "
+            "a small error in depth does not stay small by the time it reaches "
+            "the answer."
+            if prediction_pct > depth_pct else
+            f"Depth moves {depth_pct:.1f}% across the whole range while the "
+            f"prediction moves {prediction_pct:.1f}% ({worst:.3f} mg/L) - the "
+            "model **damps** the hydraulic uncertainty rather than amplifying "
+            "it, because it leans on temperature far more heavily than on the "
+            "channel. That is also why the hydraulic pipeline adds so little: "
+            "the same weakness shows up as a limitation and as a protection."
+        )
+
         verdict = (
             "This is a first-order limitation, not a footnote."
             if share >= 25 else
@@ -246,12 +270,7 @@ def report(means: pd.DataFrame, shifts: pd.DataFrame) -> str:
             f"RMSE of {RMSE:.3f} mg/L. **The roughness choice accounts for up to "
             f"{share:.0f}% of the model's error.** {verdict}",
             "",
-            "Note the asymmetry between the two tables. The hydraulics barely "
-            "move - a few percent of depth across the whole range - while the "
-            "predictions move by a large fraction of an mg/L. The model amplifies "
-            "small hydraulic changes, because its hydraulic features are "
-            "collinear and carry large offsetting coefficients. A small error in "
-            "depth does not stay small by the time it reaches the answer.",
+            amplification,
             "",
             "What would settle it: a gauged stage-discharge record for this "
             "reach. One rating curve would replace this whole range with a "
