@@ -1,16 +1,21 @@
 # AquaNexus
 
-**Physics-informed machine learning for river habitat and water-quality diagnosis.**
+**A river habitat model, and a measurement of how far it can be trusted.**
 
-A reproducible pipeline that turns Japan's open environmental data into a hydraulic
-model, a trained predictor, and an explainable API — built end to end on the
-**Ayase River (綾瀬川)** in Saitama Prefecture.
+Bathymetric point clouds → HEC-RAS hydraulics → two trained models → an explainable
+API and a dashboard, built end to end on the **Ayase River (綾瀬川)** in Saitama.
+
+Then the part that is harder to find in a portfolio project: the finished model was
+applied, unchanged, to a river it had never seen — the **Naka (中川)**, held out from
+the first day and untouched until the rest was done. It transfers where it has
+evidence (R² **+0.336**, against +0.394 at home) and collapses where it does not
+(**−0.903**). That is a measured boundary on every other number here.
 
 <p align="left">
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?logo=python&logoColor=white">
   <img alt="HEC-RAS 7.0" src="https://img.shields.io/badge/HEC--RAS-7.0-1f6feb">
   <img alt="React 19 + TypeScript" src="https://img.shields.io/badge/React%2019-TypeScript-61dafb?logo=react&logoColor=white">
-  <img alt="tests" src="https://img.shields.io/badge/tests-355%20backend%20%2B%2022%20frontend-2ea043">
+  <img alt="tests" src="https://img.shields.io/badge/tests-378%20backend%20%2B%2022%20frontend-2ea043">
   <img alt="ruff" src="https://img.shields.io/badge/lint-ruff%20clean-2ea043">
   <img alt="licence" src="https://img.shields.io/badge/licence-MIT-6e7781">
   <img alt="data" src="https://img.shields.io/badge/data-CC%20BY%204.0%20%E5%9F%BC%E7%8E%89%E7%9C%8C-e67e22">
@@ -18,16 +23,33 @@ model, a trained predictor, and an explainable API — built end to end on the
 
 ---
 
-## What this is
+## What it demonstrates
 
-Most habitat-modelling demos stop at a spreadsheet. This one starts from
-**bathymetric point clouds**, builds a real HEC-RAS model, and ends at a service
-that can explain its own predictions — with every limitation stated rather than
-buried.
+**A model with a measured domain.** Predicting dissolved oxygen from physics and
+season scores R² 0.394 on the Ayase under cross-validation with whole stations held
+out — a modest result, and 0.009 R² better than assuming no change since the last
+sample. On the held-out Naka it works inside its training ranges and fails outside
+them, which is a sharper statement of scope than any single score.
 
-The unusual part is the data. Japan publishes an exceptionally rich set of open
-environmental records, and this project is largely an exercise in finding and
-stitching them together:
+**Numbers that survive their own audit.** Three published results got *worse* when
+defects were found, and the corrections are in the repository rather than the
+history:
+
+| Published | Corrected | Why |
+|---|---|---|
+| R² 0.442, RMSE 1.713 | **R² 0.394, RMSE 1.785** | Four cross-sections were cut through bank, not channel. Removing them cost 0.05 R² and a third of the hydraulic pipeline's apparent value. |
+| Temp × discharge synergy −1.02 mg/L | **retracted** | Computed on one station's 48 rows. Pooled over 138 the sign reverses. |
+| SHAP explanations, well-formed | **were all zeros** | The explainer's background was the request itself, so every contribution was exactly 0.0 — and the test asserting they summed correctly passed on 0 = 0. |
+
+**Provenance that cannot be separated from the number.** Two models ship: one on
+real measurements, one on labels this project generated. The synthetic one is
+marked `SYNTHETIC` in every response, and the dashboard renders each prediction's
+caveats in the same card as the value.
+
+## What it is built from
+
+Japan publishes an exceptionally rich set of open environmental records, and much
+of this project is an exercise in finding and stitching them together:
 
 | Layer | Source | Why it matters |
 |---|---|---|
@@ -220,6 +242,17 @@ no hydraulic model — is worth more (+0.073). **The effect is real and small, a
 first version of this figure overstated it**: on the geometry that included four bad
 cross-sections it read +0.062, three times what the corrected geometry supports.
 
+### Where it fails
+
+![Validation by flow regime](docs/figures/validation_bands.png)
+
+**At low flow the model under-predicts oxygen by 2.3 mg/L**, with triple the
+high-flow error. That is the worst possible place for this weakness: drought is when oxygen
+stress threatens habitat, so the model is least reliable exactly where it would be
+consulted.
+
+This is surfaced in the API response, not left in a table.
+
 ### Does it work on a river it has never seen?
 
 The Naka (中川) was reserved as a held-out reach during the data audit and left
@@ -250,17 +283,6 @@ run**: the Naka carries 8.0–8.8 mg/L against the Ayase's 6.9, so a model fitte
 the more polluted river reads the cleaner one as worse than it is.
 
 Full protocol and per-station results: [`docs/HOLDOUT_RIVER.md`](docs/HOLDOUT_RIVER.md).
-
-### Where it fails
-
-![Validation by flow regime](docs/figures/validation_bands.png)
-
-**At low flow the model under-predicts oxygen by 2 mg/L**, with triple the high-flow
-error. That is the worst possible place for this weakness: drought is when oxygen
-stress threatens habitat, so the model is least reliable exactly where it would be
-consulted.
-
-This is surfaced in the API response, not left in a table.
 
 ---
 
@@ -396,7 +418,7 @@ python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\act
 pip install -e ".[ml,api,dev]"                      # add ",geo" for point clouds
 cp .env.example .env
 
-pytest                                              # 355 tests
+pytest                                              # 378 tests
 ```
 
 Rebuild the whole thing:
@@ -454,13 +476,14 @@ Stated here rather than discovered later:
 | Limitation | Detail |
 |---|---|
 | **Small sample** | The real target has **n = 138** across 4 stations. Everything should be read with that attached. |
+| **Not deployed** | No authentication, no TLS, no shared rate limit. `docs/DEPLOYMENT.md` lists what would have to change first. |
 | **Barely beats persistence** | +0.009 R², and loses on MAE. |
 | **Transfers only inside its evidence** | On a held-out river it scores +0.336 where inputs are in range and −0.903 outside it, pooling to −0.081 — worse than that river's mean. The domain is the training range, not "rivers". |
 | **Unreliable at low flow** | Under-predicts oxygen by ~2 mg/L below ≈2 m³/s. |
 | **Manning's *n* is assumed** | 0.035 channel / 0.06 overbank, not calibrated — no gauged rating curve exists for this reach. **Measured, not hand-waved:** across the plausible range 0.025–0.050 the predictions move up to 0.26 mg/L, 15% of the model's RMSE. See [`docs/MANNING_SENSITIVITY.md`](docs/MANNING_SENSITIVITY.md). |
 | **HSI labels are synthetic** | Generated here from response curves. High accuracy = function recovery. |
 | **Biology is validation only** | n = 6 for the Ayase. Too small to train on; used as an independent check. |
-| **4 sections flagged** | Cut through constrictions or structures; listed by the validator, not yet excluded. |
+| **4 sections were excluded** | Cut through bank where the centreline wandered. Measured at 64% of the model's error, then removed and everything retrained — see [`docs/CONSTRICTION_IMPACT.md`](docs/CONSTRICTION_IMPACT.md). |
 | **Chemistry treated as reach-uniform** | 5 stations over 27 km sampled monthly cannot support a per-section field. |
 
 ---
