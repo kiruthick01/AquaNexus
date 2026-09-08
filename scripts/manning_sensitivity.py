@@ -106,15 +106,20 @@ def run_one(sections, manning: float, out_dir: Path, compute: bool) -> pd.DataFr
     return pd.read_csv(cached)
 
 
-def reach_means(results: pd.DataFrame) -> pd.DataFrame:
-    """Reach-mean hydraulics per discharge - what the DO model consumes."""
-    return (results.groupby(["manning", "discharge_bc"])
+def reach_means(results: pd.DataFrame, key: str = "manning") -> pd.DataFrame:
+    """Reach-mean hydraulics per discharge - what the DO model consumes.
+
+    ``key`` names the column that separates the variants being compared, so the
+    same helper serves the roughness study and the cross-section one.
+    """
+    return (results.groupby([key, "discharge_bc"])
             .agg(depth=("depth", "mean"), velocity=("velocity", "mean"),
                  top_width=("top_width", "mean"))
             .reset_index())
 
 
-def prediction_shift(means: pd.DataFrame) -> pd.DataFrame:
+def prediction_shift(means: pd.DataFrame, key: str = "manning",
+                     baseline=BASELINE) -> pd.DataFrame:
     """What the roughness choice does to the number a reader sees.
 
     Each row of the observed record is re-predicted with the hydraulics each
@@ -142,7 +147,7 @@ def prediction_shift(means: pd.DataFrame) -> pd.DataFrame:
     model = HabitatPredictor.load(model_path)
 
     rows = []
-    for manning, block in means.groupby("manning"):
+    for variant, block in means.groupby(key):
         grid = np.sort(block["discharge_bc"].to_numpy())
         log_grid = np.log(grid)
         perturbed = dataset.copy()
@@ -158,14 +163,14 @@ def prediction_shift(means: pd.DataFrame) -> pd.DataFrame:
         perturbed["reach_froude"] = perturbed["reach_velocity"] / np.sqrt(
             9.80665 * depth.where(depth > 0)
         )
-        rows.append({"manning": manning,
+        rows.append({key: variant,
                      "mean_prediction": float(model.predict(perturbed[features]).mean()),
                      "predictions": model.predict(perturbed[features])})
 
     frame = pd.DataFrame(rows)
-    baseline = frame.loc[frame.manning == BASELINE, "predictions"]
-    if len(baseline):
-        reference = baseline.iloc[0]
+    reference_rows = frame.loc[frame[key] == baseline, "predictions"]
+    if len(reference_rows):
+        reference = reference_rows.iloc[0]
         frame["mean_abs_shift"] = [
             float(np.mean(np.abs(p - reference))) for p in frame["predictions"]
         ]
