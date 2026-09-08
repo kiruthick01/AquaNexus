@@ -81,7 +81,7 @@ Nothing here is production-hardened. At minimum, before exposing it:
 | Authentication | None. Every endpoint is open. | Put it behind a gateway or add an API key. |
 | CORS | Allows the two local dev origins. | Set `CORS_ORIGINS` to the deployed frontend. |
 | TLS | None; plain HTTP. | Terminate TLS at a proxy. |
-| Rate limiting | None. `/explain` costs ~200 ms of SHAP per call. | Limit it, or cache by state. |
+| Rate limiting | `/explain` is cached by state and capped per client (`EXPLAIN_RATE_LIMIT`, default 60/min). Other endpoints are open. | Per-process only — put a gateway in front for a shared limit. |
 | Model artefacts | Mounted from the host. | Bake them into a release image, or fetch from object storage at startup. |
 | Workers | One uvicorn worker. | `--workers N`; each loads its own copy of the models (~35 MB). |
 | Logs | stdout, human-readable. | `LOG_JSON=true` for structured output. |
@@ -99,6 +99,8 @@ that matter for a deployment:
 | `LOG_LEVEL` | `INFO` | |
 | `LOG_JSON` | `false` | |
 | `API_DEBUG` | `false` | |
+| `EXPLAIN_RATE_LIMIT` | `60` | Per client per minute, per worker. |
+| `EXPLAIN_CACHE_SIZE` | `256` | Explanations held in memory per process. |
 
 `HECRAS_EXE` is irrelevant to a deployment: HEC-RAS is Windows-only and is used
 to *generate* hydraulics, not to serve them. The container never runs it.

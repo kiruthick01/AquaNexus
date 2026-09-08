@@ -159,6 +159,14 @@ SHAP compares a prediction against a **reference distribution**, which ships
 beside each model as `<target>_background.csv`. If it is missing the endpoint
 returns 503 rather than the zeros an explainer with no reference would produce.
 
+**Cached and rate limited.** A repeated state is answered from an in-process
+cache in about 15 ms instead of 190. A state not seen before spends a token from
+a per-client bucket (default 60/minute, burst 20); exhausting it returns **429**
+with `Retry-After`. Cache hits spend nothing — the limit exists to protect CPU,
+and an answer already computed costs none. Both are per-process, so with `N`
+uvicorn workers the effective ceiling is `N × EXPLAIN_RATE_LIMIT`. Tune with
+`EXPLAIN_RATE_LIMIT` and `EXPLAIN_CACHE_SIZE`.
+
 ### `POST /scenario_run`
 
 ```bash

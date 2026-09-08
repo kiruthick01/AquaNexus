@@ -74,7 +74,7 @@ Short notes. Detail lives in `docs/` — this is just what happened when.
 - HSI labels remain synthetic; only the falsification test constrains them.
 - Neither image has been built. `tests/test_deployment.py` (20 tests) covers what a daemon is not needed for; the base images, Linux wheels, libgomp, the non-root user against a bind mount, nginx's reading of its own config and the HEALTHCHECK loops are unverified. CI's `containers` job is where that gets settled.
 - The frontend bakes its API URL in at build time (Vite substitutes `import.meta.env`), so a deployed bundle cannot be repointed without rebuilding.
-- No auth, no TLS, no rate limiting. `/explain` costs ~200 ms of SHAP per call and nothing limits it. See `docs/DEPLOYMENT.md`.
+- No auth and no TLS. `/explain` is now cached by state (~15 ms on a repeat) and capped per client, but the limit is per-process, so a shared one needs a gateway. See `docs/DEPLOYMENT.md`.
 - The full debt register is also in `05_model_validation.ipynb` §7, so it travels with the analysis.
 
 **To rebuild anything:**

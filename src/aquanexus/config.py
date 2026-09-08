@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     VAL_SIZE: float = 0.1
 
     # --- API ---
+    # /explain costs ~190 ms of SHAP per call. The cache makes a repeated state
+    # free; the rate limit caps how fast the expensive path can be entered.
+    # Both are per-process: with N uvicorn workers the effective ceiling is
+    # N x EXPLAIN_RATE_LIMIT. See docs/DEPLOYMENT.md.
+    EXPLAIN_RATE_LIMIT: int = 60  # requests per minute per client
+    EXPLAIN_CACHE_SIZE: int = 256
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     API_DEBUG: bool = False
