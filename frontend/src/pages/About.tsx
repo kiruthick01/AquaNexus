@@ -87,6 +87,13 @@ export default function About() {
             flag a hypoxic event.
           </li>
           <li>
+            <strong>It transfers only inside its evidence.</strong> Applied
+            unchanged to a river it has never seen — the Naka, held out from the
+            start — it scores R² +0.34 where inputs are in range and −0.90
+            outside, pooling to −0.08: worse than that river&rsquo;s own mean. The
+            out-of-range flag on every prediction is the line between those two.
+          </li>
+          <li>
             <strong>Ten collinear feature pairs.</strong> The hydraulic features
             are all derived from discharge, so individual SHAP contributions
             cannot be ranked against each other.

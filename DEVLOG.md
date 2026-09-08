@@ -164,9 +164,60 @@ and it did not.
 - `vitest` 3 bundles its own `vite`, which conflicts with `vite` 8's plugin types.
   Upgrading to `vitest` 5 resolves it; pinning `vite` down would too.
 
+### 2026-09-08 (later) — the held-out river
+
+The Naka (中川) was reserved during the 09-06 data audit and never touched. Ran
+end to end: 53 tiles (28 GB), 39 cross-sections, 4 validator-flagged
+constrictions excluded exactly as the Ayase's were, a 12-profile sweep spanning
+0.20–145 m³/s, then the **unchanged** Ayase model applied to 192 observations
+across 5 stations.
+
+| | n | RMSE | R² | bias |
+|---|---|---|---|---|
+| Ayase model, unchanged | 192 | 2.161 | **−0.081** | −1.29 |
+| — inside training ranges | 129 | 1.672 | **+0.336** | −0.77 |
+| — extrapolating | 63 | 2.917 | **−0.903** | −2.34 |
+| mean of the Naka (floor) | 192 | 2.079 | 0.000 | — |
+| persistence | 187 | 1.748 | +0.298 | −0.04 |
+| trained on the Naka (ceiling) | 192 | 1.495 | +0.483 | −0.11 |
+
+**Pooled it fails; split it is the most useful result the project has.** Inside
+the ranges the model was fitted on it scores +0.336 against +0.394 at home — it
+transfers to a different catchment nearly intact. Outside them it collapses.
+A third of the Naka is outside what the Ayase ever showed it, and one station
+(46八条橋, mean 75 m³/s against the Ayase's 74 maximum) carries a quarter of the
+observations at R² −1.010.
+
+Two things worth recording:
+
+- **The bias direction was written down before the run.** The Naka carries
+  8.0–8.8 mg/L against the Ayase's 6.9, so a model fitted to the more polluted
+  river should read the cleaner one as worse than it is. It does: −1.29 mg/L
+  pooled, −3.25 at the out-of-range station. A model that had learned the
+  Ayase's oxygen level rather than its physics would behave exactly this way.
+- **The out-of-range flag earned its keep.** The API has flagged these rows on
+  every prediction since Phase 3a; this quantifies what the flag is worth. On
+  the wrong side of it the model is worse than useless, on the right side it is
+  about as good as at home.
+
+The Naka-trained ceiling (+0.483) beats the Ayase model's score on its own river
+(+0.394), so the Naka is the *more* predictable river and the gap is the cost of
+transfer, not a hard river.
+
+Protocol was fixed in the script docstring before the tiles finished
+downloading, including the expected outcome and the identical-treatment
+requirement. Per-station reporting was added before results existed, once the
+station table showed one station on a different sub-reach carrying every high
+flow.
+
+Geometry note: the Naka is rougher than the Ayase — 19 warnings over 39 sections
+against 20 over 53, including a section 2.0 m wide against 107 m neighbours and
+bed steps up to 4.35 m. That the Naka-trained model still reaches +0.483 on the
+same hydraulics says the geometry is adequate and the transfer gap is real.
+
 ### Next session — pick up here
 
-**State:** All four phases done, plus a round of open-item work. 376 backend tests + 22 frontend, lint clean, all pushed. The models were retrained on corrected geometry (49 sections) on 09-08 — R² 0.394, RMSE 1.785.
+**State:** All four phases done, the open items worked down, and the held-out river run. 378 backend tests + 22 frontend, lint clean, CI green, all pushed. Models are on corrected geometry (49 sections): R² 0.394, RMSE 1.785. The Naka holdout says the model transfers inside its training ranges (+0.336) and not outside them (−0.903).
 
 **Next, in order of value:**
 1. ~~Watch the first CI run~~ — **done 09-08, and it had been red since it was added.** Both images build and the API container serves; the failure was `openpyxl`, used by the loader and never declared, which was installed here as somebody else's transitive dependency. Eight red runs went unread because I assumed CI had never run rather than checking.
@@ -180,6 +231,8 @@ and it did not.
 - Scenario answers below ~2 m³/s should not be believed regardless — the model is biased −2.26 mg/L there and drought mechanisms (heat, residence time, concentrated load) are not in the feature set.
 - Model beats persistence by **0.009 R²** and loses on MAE; predicted range 4.2–10.2 mg/L against an observed 3.0–17.0, so it cannot flag hypoxic events. Both got worse when the geometry was corrected.
 - HSI labels remain synthetic; only the falsification test constrains them.
+- The model's domain is its training range, not "rivers" — demonstrated on the Naka. Extending it needs observations from outside the Ayase's range, not a better regressor.
+- The Naka is built but not served: its sweep and geometry exist, no model is trained on it, and the API knows only the Ayase.
 - Both images build in CI and the API container starts there. Still unverified: the **frontend** container running, nginx's own SPA fallback and `no-store` handling, the HEALTHCHECK loops, and the full smoke suite against a container that has trained artefacts (CI has none).
 - ~~The frontend bakes its API URL in at build time~~ — **fixed 09-08**: the container entrypoint writes `/config.js` from `$API_BASE_URL` and the page reads it at load, verified by repointing a built bundle in the browser without rebuilding.
 - No auth and no TLS. `/explain` is now cached by state (~15 ms on a repeat) and capped per client, but the limit is per-process, so a shared one needs a gateway. See `docs/DEPLOYMENT.md`.

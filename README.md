@@ -220,6 +220,37 @@ no hydraulic model — is worth more (+0.073). **The effect is real and small, a
 first version of this figure overstated it**: on the geometry that included four bad
 cross-sections it read +0.062, three times what the corrected geometry supports.
 
+### Does it work on a river it has never seen?
+
+The Naka (中川) was reserved as a held-out reach during the data audit and left
+untouched until the rest of the project was finished. 53 tiles, 39 cross-sections,
+192 observations across 5 stations — a different river in the same prefecture, run
+through an identical pipeline, then handed to the **unchanged** Ayase model.
+
+| | n | RMSE | R² | bias |
+|---|---|---|---|---|
+| Ayase model, unchanged | 192 | 2.161 | **−0.081** | −1.29 |
+| — where the model has evidence | 129 | 1.672 | **+0.336** | −0.77 |
+| — extrapolating | 63 | 2.917 | **−0.903** | −2.34 |
+| mean of the Naka (floor) | 192 | 2.079 | 0.000 | — |
+| trained on the Naka (ceiling) | 192 | 1.495 | +0.483 | −0.11 |
+
+**Pooled, it fails: −0.081 R², worse than predicting the Naka's own mean.** Split,
+it says something more useful. Where the observation lies inside the ranges the
+model was fitted on it scores **+0.336 against +0.394 at home** — it transfers to a
+different catchment nearly intact. Where it does not, it collapses to −0.903. A
+third of this river is outside what the Ayase ever showed it, and the pooled number
+is the average of those two régimes.
+
+That is precisely what `out_of_range` marks on every prediction the API returns.
+This is what that flag is worth.
+
+The transfer is biased −1.29 mg/L, and **the direction was written down before the
+run**: the Naka carries 8.0–8.8 mg/L against the Ayase's 6.9, so a model fitted to
+the more polluted river reads the cleaner one as worse than it is.
+
+Full protocol and per-station results: [`docs/HOLDOUT_RIVER.md`](docs/HOLDOUT_RIVER.md).
+
 ### Where it fails
 
 ![Validation by flow regime](docs/figures/validation_bands.png)
@@ -424,6 +455,7 @@ Stated here rather than discovered later:
 |---|---|
 | **Small sample** | The real target has **n = 138** across 4 stations. Everything should be read with that attached. |
 | **Barely beats persistence** | +0.009 R², and loses on MAE. |
+| **Transfers only inside its evidence** | On a held-out river it scores +0.336 where inputs are in range and −0.903 outside it, pooling to −0.081 — worse than that river's mean. The domain is the training range, not "rivers". |
 | **Unreliable at low flow** | Under-predicts oxygen by ~2 mg/L below ≈2 m³/s. |
 | **Manning's *n* is assumed** | 0.035 channel / 0.06 overbank, not calibrated — no gauged rating curve exists for this reach. **Measured, not hand-waved:** across the plausible range 0.025–0.050 the predictions move up to 0.26 mg/L, 15% of the model's RMSE. See [`docs/MANNING_SENSITIVITY.md`](docs/MANNING_SENSITIVITY.md). |
 | **HSI labels are synthetic** | Generated here from response curves. High accuracy = function recovery. |
@@ -444,6 +476,7 @@ Stated here rather than discovered later:
 | [`DEVLOG.md`](DEVLOG.md) | Short daily progress notes |
 | [`docs/MANNING_SENSITIVITY.md`](docs/MANNING_SENSITIVITY.md) | What the uncalibrated roughness is worth |
 | [`docs/CONSTRICTION_IMPACT.md`](docs/CONSTRICTION_IMPACT.md) | Why four cross-sections were removed |
+| [`docs/HOLDOUT_RIVER.md`](docs/HOLDOUT_RIVER.md) | The Naka: what happens on a river the model has never seen |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Running it, and the conventions a change follows |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Running it, container notes, and what is still unverified |
 | [`notebooks/`](notebooks/) | Point-cloud→hydraulics walkthrough, data exploration, training, SHAP, validation |

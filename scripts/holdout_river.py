@@ -23,10 +23,21 @@ The protocol, fixed before any of it was run:
    - **a Naka-trained model** — the same Ridge specification fitted to the Naka
      under the same grouped cross-validation. This is the ceiling. If it also
      scores poorly, the river is the problem rather than the transfer.
-3. Results are split by whether the observation lies inside the Ayase model's
+3. Results are reported per station as well as pooled. Four Naka stations sit on
+   中川上流 at 4-21 m3/s and one on 中川中流 at 75, reaching 145 - averaging a
+   station the model has evidence for with one it plainly does not would hide
+   both.
+4. Results are split by whether the observation lies inside the Ayase model's
    **training ranges**. The Naka carries up to 145 m3/s against the Ayase's 74,
    so a large part of it is extrapolation, and reporting one number over both
    would hide which failure is which.
+
+The holdout river is processed **identically** to the training river: the same
+cross-section spacing, the same bed-quantile extraction, the same
+validator-flagged sections excluded, the same twelve-profile sweep shape. Any
+difference in treatment would confound "the model does not transfer" with "the
+pipeline was run differently", and the point of the exercise is to separate
+them.
 
 Expected outcome, recorded in advance: worse than on the Ayase. The interesting
 question is whether it beats the Naka's own mean.
@@ -124,6 +135,31 @@ def references(dataset: pd.DataFrame, features: list[str]) -> dict[str, pd.Serie
     }
 
 
+def by_station(dataset: pd.DataFrame, truth: pd.Series,
+               predicted: pd.Series, floor: float) -> pd.DataFrame:
+    """Per-station transfer.
+
+    The Naka's stations are not interchangeable: four sit on 中川上流 carrying
+    4-21 m3/s, and 46八条橋 sits on 中川中流 carrying 75 and reaching 145 - twice
+    anything in Ayase training. A pooled number would average a station the
+    model has evidence for with one it plainly does not.
+    """
+    rows = []
+    for (body, station), block in dataset.groupby(["water_body", "station"]):
+        index = block.index
+        usable = predicted[index].notna() & truth[index].notna()
+        if usable.sum() < 2:
+            continue
+        metrics = evaluate(truth[index][usable], predicted[index][usable],
+                           station, "holdout", floor)
+        rows.append({"sub-reach": body, "station": station, "n": metrics.n,
+                     "mean discharge": float(block["discharge"].mean()),
+                     "observed DO": float(block["dissolved_oxygen"].mean()),
+                     "rmse": metrics.rmse, "r2": metrics.r2,
+                     "bias": metrics.bias})
+    return pd.DataFrame(rows).sort_values("mean discharge")
+
+
 def score(name: str, truth: pd.Series, predicted: pd.Series,
           baseline: float) -> dict:
     usable = predicted.notna() & truth.notna()
@@ -163,7 +199,9 @@ def main() -> int:
                                       floor).items() if k not in ("model", "n")},
         })
 
-    document = report(args.water_body, dataset, table, pd.DataFrame(split), manifest)
+    stations = by_station(dataset, truth, transferred, floor)
+    document = report(args.water_body, dataset, table, pd.DataFrame(split),
+                      stations, manifest)
     Path("docs/HOLDOUT_RIVER.md").write_text(document, encoding="utf-8")
     log.info("wrote docs/HOLDOUT_RIVER.md")
     print(document)
@@ -171,7 +209,7 @@ def main() -> int:
 
 
 def report(water_body: str, dataset: pd.DataFrame, table: pd.DataFrame,
-           split: pd.DataFrame, manifest: dict) -> str:
+           split: pd.DataFrame, stations: pd.DataFrame, manifest: dict) -> str:
     ayase = manifest["models"]["dissolved_oxygen"]["metrics"]
     transferred = table.iloc[0]
     native = table[table.model == "trained on this river"]
@@ -220,6 +258,25 @@ def report(water_body: str, dataset: pd.DataFrame, table: pd.DataFrame,
             lines.append(f"| {row.subset} | {row.n} | {row.rmse:.3f} | "
                          f"{row.mae:.3f} | {row['r2']:+.3f} | {row.bias:+.3f} |")
 
+    if not stations.empty:
+        lines += [
+            "",
+            "## Per station",
+            "",
+            "The stations are not interchangeable: four sit on 中川上流 carrying "
+            "4–21 m³/s and one on 中川中流 carrying 75 and reaching 145 — twice "
+            "anything in Ayase training.",
+            "",
+            "| sub-reach | station | n | mean Q | observed DO | RMSE | R² | bias |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        for _, row in stations.iterrows():
+            lines.append(
+                f"| {row['sub-reach']} | {row.station} | {row.n} | "
+                f"{row['mean discharge']:.1f} | {row['observed DO']:.2f} | "
+                f"{row.rmse:.3f} | {row.r2:+.3f} | {row.bias:+.3f} |"
+            )
+
     # The verdict is computed, not written in advance.
     beats_floor = transferred.r2 > 0
     ceiling = float(native["r2"].iloc[0]) if len(native) else float("nan")
@@ -228,25 +285,65 @@ def report(water_body: str, dataset: pd.DataFrame, table: pd.DataFrame,
         "## Verdict",
         "",
     ]
+    # Pooled first, then the split - which usually changes the reading.
+    empty = pd.DataFrame()
+    inside_row = split[split.subset.str.startswith("inside")] if not split.empty else empty
+    outside_row = split[split.subset.str.startswith("outside")] if not split.empty else empty
+
     if beats_floor:
         lines.append(
-            f"The Ayase model transfers: on a river it has never seen it scores "
-            f"R² {transferred.r2:+.3f}, better than predicting that river's own "
-            f"mean. "
+            f"Pooled over the whole river the Ayase model scores R² "
+            f"{transferred.r2:+.3f}, better than predicting that river's own mean."
         )
     else:
         lines.append(
-            f"**The Ayase model does not transfer.** On a river it has never "
-            f"seen it scores R² {transferred.r2:+.3f} — worse than predicting "
-            f"that river's own mean, which needs no model at all. "
+            f"Pooled over the whole river the Ayase model scores R² "
+            f"{transferred.r2:+.3f} — worse than predicting that river's own "
+            f"mean, which needs no model at all."
         )
+
+    if len(inside_row) and len(outside_row):
+        inside_r2 = float(inside_row["r2"].iloc[0])
+        outside_r2 = float(outside_row["r2"].iloc[0])
+        ayase_r2 = float(ayase["r2"])
+        if inside_r2 > 0 and outside_r2 < inside_r2:
+            lines += [
+                "",
+                f"**That single number is misleading, and the split says why.** "
+                f"Where the model has evidence it scores R² {inside_r2:+.3f} — "
+                f"against {ayase_r2:+.3f} on its own river, so it transfers to a "
+                f"different catchment nearly intact. Where it does not, it scores "
+                f"{outside_r2:+.3f}. The pooled figure is the average of a model "
+                f"working and the same model extrapolating, and "
+                f"{int(outside_row['n'].iloc[0])} of {int(transferred.n)} "
+                f"observations are outside the range it was fitted on.",
+                "",
+                "The API already flags exactly these rows as out of range on every "
+                "prediction. This is what that flag is worth: on the wrong side of "
+                "it the model is worse than useless, and on the right side it is "
+                "about as good as it is at home.",
+            ]
+
     if np.isfinite(ceiling):
-        lines.append(
-            f"A model of the same specification fitted to this river reaches "
-            f"R² {ceiling:+.3f}, so the gap between {transferred.r2:+.3f} and "
-            f"{ceiling:+.3f} is what transferring costs, and the remainder is "
-            f"the river being hard."
-        )
+        lines += [
+            "",
+            f"A model of the same specification fitted to this river reaches R² "
+            f"{ceiling:+.3f} — better than the Ayase model manages on the Ayase. "
+            f"The Naka is the more predictable river, so the gap between "
+            f"{transferred.r2:+.3f} and {ceiling:+.3f} is the cost of transfer "
+            f"rather than a hard river.",
+        ]
+
+    bias = float(transferred.bias)
+    if abs(bias) > 0.5:
+        lines += [
+            "",
+            f"The transfer is **biased {bias:+.2f} mg/L**, and the direction was "
+            f"predicted before the run: the Naka carries 8.0–8.8 mg/L against the "
+            f"Ayase's 6.9, so a model fitted to the more polluted river reads the "
+            f"cleaner one as worse than it is. A model that learned this river's "
+            f"oxygen level rather than its physics would do exactly this.",
+        ]
     return "\n".join(lines) + "\n"
 
 

@@ -179,8 +179,11 @@ survive refutation.
 
 - **Held-out flow space** (primary) — train on the interior of the design grid, test
   on an unseen corner such as high discharge with high temperature.
-- **Held-out reach** (secondary) — still valid. Naka is reserved for this; it has
-  contiguous point-cloud coverage and its own monitoring stations.
+- **Held-out reach** (secondary) — **done, 2026-09-08.** See
+  `HOLDOUT_RIVER.md`: the Naka was built through an identical pipeline and
+  handed to the unchanged Ayase model. It scores R² +0.336 where the inputs lie
+  inside the training ranges, against +0.394 at home, and −0.903 outside them,
+  pooling to −0.081. The model's domain is its training range, not "rivers".
 - **Held-out extremes** (tertiary) — reframed from "event-based": the extreme
   conditions within the design grid.
 
