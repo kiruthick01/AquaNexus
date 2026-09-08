@@ -38,9 +38,46 @@ from aquanexus.logger import get_logger
 
 log = get_logger("scripts.run_hecras")
 
-#: Twelve log-spaced discharges spanning the observed range (0.17-73.7 m3/s).
+#: Twelve log-spaced discharges spanning the Ayase's observed range.
 DISCHARGES = (0.17, 0.3, 0.51, 0.89, 1.55, 2.69, 4.67, 8.1, 14.07, 24.44,
               42.44, 73.71)
+
+
+def discharges_for(water_body: str, steps: int = 12) -> tuple[float, ...]:
+    """Log-spaced discharges spanning what was actually measured on a river.
+
+    Each river needs its own grid. The Naka carries up to 145 m3/s against the
+    Ayase's 74, and interpolating one river's hydraulics onto the other's flows
+    would clamp every high observation to the top of the wrong sweep.
+
+    Log spacing because discharge covers orders of magnitude: linear spacing
+    puts almost every profile at the high end and misrepresents low flow, which
+    is where habitat stress bites.
+    """
+    import glob
+
+    from aquanexus.data.loader import filter_stations, load_many
+
+    files = sorted(glob.glob(str(settings.RAW_DIR / "waterquality" / "saitama_*.xlsx")))
+    if not files:
+        log.warning("no water quality files; falling back to the Ayase grid")
+        return DISCHARGES
+
+    observed = filter_stations(load_many(files), water_body=water_body)
+    flows = observed["discharge"].dropna()
+    if len(flows) < 2:
+        log.warning("%s has no discharge record; falling back to the Ayase grid",
+                    water_body)
+        return DISCHARGES
+
+    low, high = float(flows.min()), float(flows.max())
+    import numpy as np
+
+    grid = np.geomspace(max(low, 0.01), high, steps)
+    log.info("%s: %d observation(s), sweep %.2f-%.1f m3/s",
+             water_body, len(flows), grid[0], grid[-1])
+    return tuple(round(float(q), 2) for q in grid)
+
 
 COLUMNS = ["discharge_bc", "river_station", "wse", "invert", "depth", "velocity",
            "discharge", "flow_area", "top_width", "energy_slope"]
@@ -69,6 +106,15 @@ def main() -> int:
                         help="drop sections the validator flags as constrictions")
     parser.add_argument("--no-run", action="store_true",
                         help="rebuild the CSV from a previous computation")
+    parser.add_argument("--water-body", default=None,
+                        help="derive the discharge grid from this river's "
+                             "observed record, e.g. 中川")
+    parser.add_argument("--sweep-name", default="ayase_flow_sweep",
+                        help="basename for the CSV written to data/processed")
+    parser.add_argument("--river-name", default="Ayase",
+                        help="project title written into the HEC-RAS files")
+    parser.add_argument("--reach-river", default="Ayasegawa",
+                        help="river name inside the geometry, e.g. Nakagawa")
     args = parser.parse_args()
 
     settings.ensure_dirs()
@@ -90,13 +136,14 @@ def main() -> int:
                  len(sections))
 
     out_dir = Path(args.out) if args.out else (settings.HECRAS_DIR / "ayase_sweep")
+    discharges = discharges_for(args.water_body) if args.water_body else DISCHARGES
     profiles = [SteadyFlowProfile("Q" + f"{q}".replace(".", "p"), q)
-                for q in DISCHARGES]
+                for q in discharges]
 
     prj = write_project(
-        out_dir, "Ayase",
-        to_hecras_geometry(sections, river="Ayasegawa", reach="Main"),
-        profiles, river="Ayasegawa", reach="Main",
+        out_dir, args.river_name,
+        to_hecras_geometry(sections, river=args.reach_river, reach="Main"),
+        profiles, river=args.reach_river, reach="Main",
         upstream_station=max(s.river_station for s in sections),
     )
     log.info("wrote %s", prj)
@@ -122,7 +169,7 @@ def main() -> int:
                      len(results))
 
     sweep = pd.DataFrame(rows)[COLUMNS]
-    out_csv = settings.PROCESSED_DIR / "ayase_flow_sweep.csv"
+    out_csv = settings.PROCESSED_DIR / f"{args.sweep_name}.csv"
     sweep.to_csv(out_csv, index=False)
     log.info("wrote %s: %d row(s), %d section(s) x %d discharge(s)",
              out_csv, len(sweep), sweep.river_station.nunique(),
