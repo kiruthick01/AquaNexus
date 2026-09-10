@@ -12,6 +12,7 @@ import Analyze from "./pages/Analyze";
 import Home from "./pages/Home";
 import Predict from "./pages/Predict";
 import Scenarios from "./pages/Scenarios";
+import Transfer from "./pages/Transfer";
 import { API_BASE } from "./services/api";
 import { useModels } from "./useModels";
 
@@ -20,6 +21,7 @@ const NAV = [
   { to: "/predict", label: "Predict" },
   { to: "/scenarios", label: "Scenarios" },
   { to: "/analyze", label: "Analyze" },
+  { to: "/transfer", label: "Transfer" },
   { to: "/about", label: "About" },
 ];
 
@@ -91,6 +93,9 @@ export default function App() {
           <Route path="/predict" element={<Predict models={models} />} />
           <Route path="/scenarios" element={<Scenarios models={models} />} />
           <Route path="/analyze" element={<Analyze models={models} />} />
+          {/* Not passed `models`: the transfer result is a record of an
+              experiment, and the API serves it even when no model is loaded. */}
+          <Route path="/transfer" element={<Transfer />} />
           <Route path="/about" element={<About />} />
           <Route
             path="*"

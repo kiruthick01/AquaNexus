@@ -99,6 +99,46 @@ export interface ModelInfo {
   target_range: number[];
 }
 
+/** One scored row of the held-out river result. */
+export interface TransferScore {
+  label: string;
+  n: number;
+  rmse: number;
+  mae: number | null;
+  r2: number;
+  bias: number;
+}
+
+export interface TransferStation {
+  sub_reach: string;
+  station: string;
+  n: number;
+  mean_discharge: number;
+  observed_do: number;
+  rmse: number;
+  r2: number;
+  bias: number;
+  /** Whether the model was ever shown flows like this one. */
+  in_training_range: boolean;
+}
+
+export interface HoldoutResponse {
+  river: string;
+  river_ja: string;
+  trained_on: string;
+  n: number;
+  n_stations: number;
+  generated: string;
+  /** The split reading. The pooled score alone is the misleading version. */
+  headline: string;
+  pooled: TransferScore[];
+  by_evidence: TransferScore[];
+  by_station: TransferStation[];
+  home_metrics: Record<string, number | string>;
+  document: string;
+  caveats: string[];
+}
+
 export interface HealthResponse {
   status: "ok" | "degraded";
   version: string;

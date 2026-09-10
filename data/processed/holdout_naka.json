@@ -1,0 +1,140 @@
+{
+  "river": {
+    "name": "Naka",
+    "name_ja": "中川"
+  },
+  "generated": "2026-09-10T16:41:19+00:00",
+  "source": "scripts/holdout_river.py",
+  "document": "docs/HOLDOUT_RIVER.md",
+  "n": 192,
+  "n_stations": 5,
+  "trained_on": {
+    "river": "Ayase (綾瀬川)",
+    "target": "dissolved_oxygen",
+    "unit": "mg/L",
+    "n_train": 138,
+    "metrics": {
+      "rmse": 1.7848778680440163,
+      "mae": 1.2737725347933389,
+      "r2": 0.3944476804125533,
+      "validation": "grouped CV, each station held out"
+    }
+  },
+  "pooled": [
+    {
+      "model": "Ayase model, unchanged",
+      "n": 192,
+      "rmse": 2.1610485737752327,
+      "mae": 1.559405591508457,
+      "r2": -0.08064521274104886,
+      "bias": -1.2869603105070382
+    },
+    {
+      "model": "mean of this river",
+      "n": 192,
+      "rmse": 2.078849080203729,
+      "mae": 1.6684244791666665,
+      "r2": 0.0,
+      "bias": -7.771561172376096e-16
+    },
+    {
+      "model": "persistence",
+      "n": 187,
+      "rmse": 1.7479858539057305,
+      "mae": 1.2005347593582887,
+      "r2": 0.2981190232884331,
+      "bias": -0.04438502673796792
+    },
+    {
+      "model": "trained on this river",
+      "n": 192,
+      "rmse": 1.494709857447184,
+      "mae": 0.9495220773561494,
+      "r2": 0.48302698544251976,
+      "bias": -0.10960023153443636
+    }
+  ],
+  "by_evidence": [
+    {
+      "subset": "inside Ayase training ranges",
+      "n": 129,
+      "rmse": 1.6723190848601104,
+      "mae": 1.0961598521182847,
+      "r2": 0.336338579115393,
+      "bias": -0.7726776643985066
+    },
+    {
+      "subset": "outside (extrapolation)",
+      "n": 63,
+      "rmse": 2.9165568563075452,
+      "mae": 2.5079563912121445,
+      "r2": -0.9026770499644334,
+      "bias": -2.340015252538795
+    }
+  ],
+  "by_station": [
+    {
+      "sub_reach": "中川上流",
+      "station": "51道橋",
+      "n": 36,
+      "mean_discharge": 3.794166666666667,
+      "observed_do": 8.466666666666667,
+      "rmse": 1.1057387150258342,
+      "r2": 0.5590493707408196,
+      "bias": -0.511762952854452,
+      "in_training_range": true
+    },
+    {
+      "sub_reach": "中川上流",
+      "station": "50行幸橋",
+      "n": 36,
+      "mean_discharge": 6.5425,
+      "observed_do": 8.441666666666666,
+      "rmse": 2.092918854005442,
+      "r2": 0.19891725391355064,
+      "bias": -0.8716688223450872,
+      "in_training_range": true
+    },
+    {
+      "sub_reach": "中川上流",
+      "station": "49松富橋",
+      "n": 36,
+      "mean_discharge": 10.33333333333333,
+      "observed_do": 7.872222222222224,
+      "rmse": 1.0499372192147318,
+      "r2": 0.5405322117055047,
+      "bias": -0.2447127026329691,
+      "in_training_range": true
+    },
+    {
+      "sub_reach": "中川上流",
+      "station": "48豊橋",
+      "n": 36,
+      "mean_discharge": 21.055555555555557,
+      "observed_do": 8.036111111111111,
+      "rmse": 1.1665852146073854,
+      "r2": 0.6065535169589379,
+      "bias": -0.9061923415452137,
+      "in_training_range": true
+    },
+    {
+      "sub_reach": "中川中流",
+      "station": "46八条橋",
+      "n": 48,
+      "mean_discharge": 75.09104166666667,
+      "observed_do": 8.758333333333333,
+      "rmse": 3.5539880776277735,
+      "r2": -1.0099675115232798,
+      "bias": -3.2470886274948625,
+      "in_training_range": false
+    }
+  ],
+  "headline": "Inside the ranges it was fitted on, the unchanged Ayase model scores R² +0.336 on a river it has never seen — against +0.394 at home. Outside them it scores -0.903, worse than predicting this river's mean.",
+  "caveats": [
+    "The model is unchanged: loaded from disk as the API serves it, with no refitting or recalibration against the Naka.",
+    "Pooled over the river the transfer scores R² -0.081. Read the split, not the pooled figure — it averages two different regimes.",
+    "63 of 192 observations fall outside the Ayase training ranges. These are the rows /predict has flagged as out of range since the API was first served; this is what that flag is worth.",
+    "The transfer is biased -1.29 mg/L. The Naka carries more oxygen than the Ayase, so a model fitted to the more polluted river reads the cleaner one as worse than it is. The direction was recorded before the run.",
+    "Stations are not interchangeable: the per-station table spans one sub-reach inside the training range and one well outside it, and a pooled score hides which is which."
+  ]
+}

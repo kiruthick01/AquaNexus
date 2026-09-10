@@ -15,6 +15,7 @@ import type {
   EnvironmentalState,
   ExplanationResponse,
   HealthResponse,
+  HoldoutResponse,
   ModelInfo,
   PredictionResponse,
   ScenarioResponse,
@@ -102,6 +103,8 @@ export const api = {
   health: () => request<HealthResponse>("/health"),
 
   models: () => request<ModelInfo[]>("/models"),
+
+  holdout: () => request<HoldoutResponse>("/holdout"),
 
   predict: (state: EnvironmentalState, target: Target, explain = false) =>
     post<PredictionResponse>("/predict", { state, target, explain }),

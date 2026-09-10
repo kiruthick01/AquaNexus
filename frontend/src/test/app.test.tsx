@@ -87,7 +87,7 @@ describe("App", () => {
     const card = await screen.findByRole("region", { name: "Prediction" });
     expect(within(card).getByText("4.95")).toBeInTheDocument();
     expect(
-      within(card).getByText(/Beats a persistence baseline by only 0.06 R2/),
+      within(card).getByText(/Barely beats a persistence baseline - 0.009 R2/),
     ).toBeInTheDocument();
   });
 

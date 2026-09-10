@@ -27,6 +27,10 @@ data/hecras/*
 data/models/*
 data/cache/*
 !data/**/.gitkeep
+# The held-out river result is the exception: 5 KB of numbers, and regenerating
+# it needs HEC-RAS on Windows and 28 GB of LAS tiles that are not in the repo.
+# Tracking it is what lets a plain clone serve GET /holdout.
+!data/processed/holdout_naka.json
 *.las
 *.laz
 *.tif

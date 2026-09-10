@@ -20,7 +20,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from aquanexus.api.registry import registry
-from aquanexus.api.routes import explanations, health, predictions, scenarios
+from aquanexus.api.routes import (
+    explanations,
+    health,
+    holdout,
+    predictions,
+    scenarios,
+)
 from aquanexus.config import settings
 from aquanexus.logger import get_logger
 
@@ -41,6 +47,12 @@ Saitama, Japan.
   ecological skill.
 
 Every prediction response carries the relevant caveats. Call `GET /models` first.
+
+**The model's domain is its training range, not "rivers".** `GET /holdout` serves
+what happened when the oxygen model was applied, unchanged, to the Naka (中川) —
+a different catchment reserved before any of this was built. Inside the ranges it
+was fitted on it transfers nearly intact; outside them it is worse than useless.
+That is also what the out-of-range flag on every prediction is worth.
 """
 
 
@@ -107,6 +119,7 @@ app.include_router(health.router)
 app.include_router(predictions.router)
 app.include_router(scenarios.router)
 app.include_router(explanations.router)
+app.include_router(holdout.router)
 
 
 @app.get("/", tags=["meta"], summary="Service description")

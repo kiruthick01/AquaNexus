@@ -651,6 +651,27 @@ figcaption {
   background: #fbfaf6;
 }
 
+/* -------------------------------------------------------------- transfer -- */
+
+/*
+ * The held-out river. The staff is the argument: a score below the datum is
+ * beaten by predicting the river's mean, so "below" is marked in the same red
+ * the interface uses for a reading outside its evidence — the two mean the same
+ * thing here.
+ */
+.transfer-scale {
+  margin-top: 0.8rem;
+}
+
+td.below,
+th.below {
+  color: var(--flag);
+}
+
+.flagged {
+  color: var(--flag);
+}
+
 /* Collinear pairs read as a list of facts, not one dot-joined string. */
 .pair {
   display: inline-block;

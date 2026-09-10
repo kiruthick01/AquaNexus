@@ -123,8 +123,8 @@ Honest accounting of what has actually been checked.
   is a build argument, and the SPA fallback is configured.
 - The API image's install step, by installing `.[ml,api]` into a clean virtual
   environment and serving from the installed copy with no source on the path —
-  degraded without `DATA_DIR`, and 14/14 smoke checks with it.
-- The frontend build (`npm run build`) and its 22 tests, on every change.
+  degraded without `DATA_DIR`, and every smoke check passing with it.
+- The frontend build (`npm run build`) and its 33 tests, on every change.
 - The runtime config end to end, by building with no `VITE_API_BASE_URL`,
   writing `config.js` the way the entrypoint does, serving `dist/` statically
   and confirming in a browser that rewriting that one file repoints the app

@@ -194,6 +194,79 @@ class ModelInfo(BaseModel):
     )
 
 
+class TransferScore(BaseModel):
+    """One row of the held-out river result."""
+
+    label: str = Field(..., description="What was scored, or which subset of it")
+    n: int
+    rmse: float
+    mae: float | None = None
+    r2: float
+    bias: float
+
+
+class TransferStation(BaseModel):
+    """Per-station transfer, because the stations are not interchangeable."""
+
+    sub_reach: str
+    station: str
+    n: int
+    mean_discharge: float
+    observed_do: float
+    rmse: float
+    r2: float
+    bias: float
+    in_training_range: bool = Field(
+        ...,
+        description="Whether this station's mean discharge falls inside the "
+                    "range the model was fitted on. The two regimes score very "
+                    "differently and a client that cannot separate them would "
+                    "show one misleading average.",
+    )
+
+
+class HoldoutResponse(BaseModel):
+    """The model applied, unchanged, to a river it was never trained on.
+
+    Served because every other generalisation number in this API is *within*
+    one river - four stations sharing a channel, a catchment and a sampling
+    programme. This is the only evidence here about a different catchment, and
+    it is also the only place the out-of-range flag on `/predict` is quantified.
+    """
+
+    river: str
+    river_ja: str
+    trained_on: str
+    n: int
+    n_stations: int
+    generated: str
+    headline: str = Field(
+        ...,
+        description="The split reading, derived from the numbers in the run "
+                    "that produced them. The pooled score alone is misleading.",
+    )
+    pooled: list[TransferScore] = Field(
+        ...,
+        description="The transfer against three references computed on the "
+                    "holdout river itself: its own mean (the floor), "
+                    "persistence (no model at all), and the same specification "
+                    "fitted to it (the ceiling).",
+    )
+    by_evidence: list[TransferScore] = Field(
+        default_factory=list,
+        description="Split by whether every feature the row supplies falls "
+                    "inside the model's training ranges.",
+    )
+    by_station: list[TransferStation] = Field(default_factory=list)
+    home_metrics: dict[str, float | str] = Field(
+        default_factory=dict,
+        description="The same model's scores on its own river, so the transfer "
+                    "can be read against something.",
+    )
+    document: str = Field(..., description="The written version of this result")
+    caveats: list[str] = Field(default_factory=list)
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     version: str

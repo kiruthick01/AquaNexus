@@ -6,7 +6,7 @@ CSS for the styling, inline SVG for the charts.
 ```bash
 npm install
 npm run dev      # http://localhost:3000, expects the API on :8000
-npm run test     # 22 tests
+npm run test     # 33 tests
 npm run build    # typecheck + production bundle into dist/
 ```
 
@@ -50,9 +50,10 @@ src/
 │   ├── PredictionCard.tsx
 │   ├── ExplainabilityPanel.tsx   SHAP bars, inline SVG
 │   ├── InteractionHeatmap.tsx    response surface, inline SVG
+│   ├── TransferScale.tsx         held-out river against its datums, inline SVG
 │   ├── ScenarioBuilder.tsx
 │   └── TargetPicker.tsx
-└── pages/                   Home, Predict, Scenarios, Analyze, About
+└── pages/                   Home, Predict, Scenarios, Analyze, Transfer, About
 ```
 
 ## Choices worth explaining

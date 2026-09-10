@@ -53,6 +53,7 @@ import argparse
 import glob
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -71,6 +72,10 @@ log = get_logger("scripts.holdout_river")
 HOLDOUT_JA = "中川"
 HOLDOUT_NAME = "Naka"
 SWEEP = "naka_flow_sweep"
+#: Machine-readable twin of `docs/HOLDOUT_RIVER.md`, written from the same
+#: computed values in the same run. The API serves the transfer result from
+#: this, so nobody has to keep a second copy of the numbers in step by hand.
+ARTEFACT = "holdout_naka.json"
 
 
 def load_holdout(water_body: str, sweep_name: str) -> pd.DataFrame:
@@ -204,8 +209,115 @@ def main() -> int:
                       stations, manifest)
     Path("docs/HOLDOUT_RIVER.md").write_text(document, encoding="utf-8")
     log.info("wrote docs/HOLDOUT_RIVER.md")
+
+    served = evidence(args.water_body, dataset, table, pd.DataFrame(split),
+                      stations, manifest)
+    artefact = settings.PROCESSED_DIR / ARTEFACT
+    artefact.write_text(json.dumps(served, ensure_ascii=False, indent=2),
+                        encoding="utf-8")
+    log.info("wrote %s", artefact)
     print(document)
     return 0
+
+
+def station_records(stations: pd.DataFrame, home: dict) -> list[dict]:
+    """Per-station rows, each carrying whether the model has evidence for it.
+
+    The flag is on mean discharge, which is what separates the two sub-reaches:
+    four stations sit inside the range the model was fitted on and one sits at
+    twice its maximum. A client that cannot tell them apart would average a
+    working model with an extrapolating one and show a single misleading score.
+    """
+    if stations.empty:
+        return []
+    low, high = home["training_ranges"]["discharge"]
+    records = stations.rename(
+        columns={"sub-reach": "sub_reach", "mean discharge": "mean_discharge",
+                 "observed DO": "observed_do"}
+    ).to_dict(orient="records")
+    for row in records:
+        row["in_training_range"] = bool(low <= row["mean_discharge"] <= high)
+    return records
+
+
+def evidence(water_body: str, dataset: pd.DataFrame, table: pd.DataFrame,
+             split: pd.DataFrame, stations: pd.DataFrame, manifest: dict) -> dict:
+    """The same result as `report`, in a form the API can serve.
+
+    The prose here is derived from the numbers in this run rather than written
+    beside them, for the same reason the document's verdict is: a sentence
+    typed once and left alone stops being true the next time anything is
+    retrained.
+    """
+    home = manifest["models"]["dissolved_oxygen"]
+    transferred = table.iloc[0]
+
+    def subset(prefix: str) -> dict | None:
+        if split.empty:
+            return None
+        rows = split[split.subset.str.startswith(prefix)]
+        return None if rows.empty else rows.iloc[0].to_dict()
+
+    inside, outside = subset("inside"), subset("outside")
+
+    headline = (
+        f"Pooled over the whole river the transfer scores R² {transferred.r2:+.3f}. "
+        "That single number averages a model working with the same model "
+        "extrapolating, and the split below is the honest reading."
+    )
+    if inside and outside:
+        headline = (
+            f"Inside the ranges it was fitted on, the unchanged Ayase model scores "
+            f"R² {inside['r2']:+.3f} on a river it has never seen — against "
+            f"{home['metrics']['r2']:+.3f} at home. Outside them it scores "
+            f"{outside['r2']:+.3f}, worse than predicting this river's mean."
+        )
+
+    caveats = [
+        f"The model is unchanged: loaded from disk as the API serves it, with no "
+        f"refitting or recalibration against the {HOLDOUT_NAME}.",
+        f"Pooled over the river the transfer scores R² {transferred.r2:+.3f}. Read "
+        f"the split, not the pooled figure — it averages two different regimes.",
+    ]
+    if outside:
+        caveats.append(
+            f"{int(outside['n'])} of {int(transferred.n)} observations fall outside "
+            f"the Ayase training ranges. These are the rows /predict has flagged as "
+            f"out of range since the API was first served; this is what that flag "
+            f"is worth."
+        )
+    caveats.append(
+        f"The transfer is biased {transferred.bias:+.2f} mg/L. The {HOLDOUT_NAME} "
+        f"carries more oxygen than the Ayase, so a model fitted to the more "
+        f"polluted river reads the cleaner one as worse than it is. The direction "
+        f"was recorded before the run."
+    )
+    caveats.append(
+        "Stations are not interchangeable: the per-station table spans one "
+        "sub-reach inside the training range and one well outside it, and a "
+        "pooled score hides which is which."
+    )
+
+    return {
+        "river": {"name": HOLDOUT_NAME, "name_ja": water_body},
+        "generated": datetime.now(UTC).isoformat(timespec="seconds"),
+        "source": "scripts/holdout_river.py",
+        "document": "docs/HOLDOUT_RIVER.md",
+        "n": int(transferred.n),
+        "n_stations": int(dataset["station"].nunique()),
+        "trained_on": {
+            "river": f"{manifest.get('river', 'Ayase')} ({manifest.get('river_ja', '')})".strip(),
+            "target": home["target"],
+            "unit": home["unit"],
+            "n_train": int(home["n_train"]),
+            "metrics": dict(home["metrics"]),
+        },
+        "pooled": table.to_dict(orient="records"),
+        "by_evidence": split.to_dict(orient="records") if not split.empty else [],
+        "by_station": station_records(stations, home),
+        "headline": headline,
+        "caveats": caveats,
+    }
 
 
 def report(water_body: str, dataset: pd.DataFrame, table: pd.DataFrame,

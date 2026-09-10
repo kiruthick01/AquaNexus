@@ -15,7 +15,7 @@ evidence (R² **+0.336**, against +0.394 at home) and collapses where it does no
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?logo=python&logoColor=white">
   <img alt="HEC-RAS 7.0" src="https://img.shields.io/badge/HEC--RAS-7.0-1f6feb">
   <img alt="React 19 + TypeScript" src="https://img.shields.io/badge/React%2019-TypeScript-61dafb?logo=react&logoColor=white">
-  <img alt="tests" src="https://img.shields.io/badge/tests-378%20backend%20%2B%2022%20frontend-2ea043">
+  <img alt="tests" src="https://img.shields.io/badge/tests-388%20backend%20%2B%2033%20frontend-2ea043">
   <img alt="ruff" src="https://img.shields.io/badge/lint-ruff%20clean-2ea043">
   <img alt="licence" src="https://img.shields.io/badge/licence-MIT-6e7781">
   <img alt="data" src="https://img.shields.io/badge/data-CC%20BY%204.0%20%E5%9F%BC%E7%8E%89%E7%9C%8C-e67e22">
@@ -283,6 +283,8 @@ run**: the Naka carries 8.0–8.8 mg/L against the Ayase's 6.9, so a model fitte
 the more polluted river reads the cleaner one as worse than it is.
 
 Full protocol and per-station results: [`docs/HOLDOUT_RIVER.md`](docs/HOLDOUT_RIVER.md).
+The API serves the same numbers at `GET /holdout`, and the dashboard draws them on
+the **Transfer** page — the split, not the pooled figure, leads in both.
 
 ---
 
@@ -337,11 +339,12 @@ sequenceDiagram
 | `POST /batch_predict` | Up to 1,000 states |
 | `POST /scenario_run` | What-if against a baseline |
 | `POST /explain` | SHAP contributions + collinear-pair warnings |
+| `GET /holdout` | The held-out river: what the model scored on a catchment it never saw |
 
 ```bash
 uvicorn aquanexus.api.app:app --reload   # docs at localhost:8000/docs
 docker compose up                        # same thing in a container
-python scripts/verify_deployment.py      # 14 smoke checks against a running API
+python scripts/verify_deployment.py      # 15 smoke checks against a running API
 ```
 
 Design decisions worth noting:
@@ -356,6 +359,9 @@ Design decisions worth noting:
 - **Models are not baked into the image.** They are build outputs, so the container
   reads them from the mounted `./data`. Without that mount it starts *degraded* and
   `/health` says why, rather than serving predictions from nothing.
+- **`/holdout` answers even when no model is loaded.** The transfer result is a
+  record of an experiment rather than a live capability, so a degraded API can
+  still say what happened when this model met a river it had not seen.
 
 Full reference: [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md).
 
@@ -392,6 +398,15 @@ training range. It shows oxygen falling with both temperature and discharge — 
 plainly that most of that plane is a state the river never produces, since discharge
 and velocity are coupled through the hydraulic model and only one of them moves here.
 
+![Transfer page: the held-out river drawn against its datums](docs/figures/ui_transfer.jpg)
+
+The Transfer page is the same idea applied to a score rather than a reading. An R²
+alone says nothing, so the two references that give it meaning are drawn as datums —
+zero, which is what predicting the river's own mean scores, and what the same model
+gets at home — and the transfer's two régimes are hung against them. Read as a table
+the four numbers invite an average; read as a staff, the distance between working
+and extrapolating is the first thing visible.
+
 ```bash
 cd frontend && npm install && npm run dev   # http://localhost:3000
 ```
@@ -418,7 +433,7 @@ python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\act
 pip install -e ".[ml,api,dev]"                      # add ",geo" for point clouds
 cp .env.example .env
 
-pytest                                              # 378 tests
+pytest                                              # 388 tests
 ```
 
 Rebuild the whole thing:

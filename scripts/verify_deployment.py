@@ -165,6 +165,34 @@ def check_scenario(checks: Checks) -> None:
                   f"{body['change']:+.3f} {body['unit']}")
 
 
+def check_holdout(checks: Checks) -> None:
+    """The transfer result must be served, and must not lead with the pooled score.
+
+    Checked outside the `healthy` branch because it is checked *for* being
+    independent of the models: a degraded API still has this to say, and the
+    only honest failure here is the artefact being absent.
+    """
+    response = checks.get("/holdout")
+    if response.status_code == 503:
+        return checks.record(SKIP, "held-out river served",
+                             "not generated; run scripts/holdout_river.py")
+    if response.status_code != 200:
+        return checks.record(FAIL, "held-out river served",
+                             f"HTTP {response.status_code}")
+
+    body = response.json()
+    inside = [row for row in body["by_evidence"] if row["label"].startswith("inside")]
+    pooled = body["pooled"][0]["r2"]
+    # The pooled figure has to be disclosed, and the headline has to be the split.
+    disclosed = any(f"{pooled:+.3f}" in caveat for caveat in body["caveats"])
+    split_led = bool(inside) and f"{inside[0]['r2']:+.3f}" in body["headline"]
+
+    checks.record(PASS if disclosed and split_led else FAIL,
+                  "held-out river leads with the split, discloses the pooled score",
+                  f"pooled {pooled:+.3f}, in-range {inside[0]['r2']:+.3f}"
+                  if inside else f"pooled {pooled:+.3f}, no split")
+
+
 def check_error_handling(checks: Checks) -> None:
     """A malformed request must come back as JSON, not an HTML error page."""
     response = checks.post("/predict", {"target": "dissolved_oxygen", "state": {}})
@@ -208,6 +236,7 @@ def main() -> int:
         healthy = check_health(checks)
         check_docs(checks)
         check_error_handling(checks)
+        check_holdout(checks)
 
         if healthy:
             check_provenance(checks)

@@ -215,14 +215,52 @@ against 20 over 53, including a section 2.0 m wide against 107 m neighbours and
 bed steps up to 4.35 m. That the Naka-trained model still reaches +0.483 on the
 same hydraulics says the geometry is adequate and the transfer gap is real.
 
+### 2026-09-10 — the held-out river is served, not just written
+
+The transfer result was the strongest thing in the project and the only way to
+see it was to open a markdown file. It is now an API endpoint and a dashboard
+page.
+
+- **`scripts/holdout_river.py` writes a machine-readable twin** of
+  `docs/HOLDOUT_RIVER.md` — `data/processed/holdout_naka.json` — in the same run,
+  from the same computed values. Re-running it reproduced the document
+  byte-identically, which is the reproducibility check the artefact needed
+  before anything was built on it.
+- **`GET /holdout`** serves the pooled table, the split, the per-station rows and
+  the home metrics. It **loads before the manifest check**, so an API with no
+  models can still answer it: the transfer is a record of an experiment, not a
+  live capability, and a degraded service still has it to say.
+- **The per-station `in_training_range` flag is computed in the run**, not in the
+  route, and a test asserts it agrees with the `training_ranges` that `/models`
+  publishes. Two ways to say where the evidence ends is one too many.
+- **A test reads the numbers back out of the markdown and compares them to the
+  API.** Mutating one figure in the document fails it — checked, rather than
+  assumed. Two copies of a number are two chances to be wrong, and the written
+  one is what a reader will quote.
+- **Dashboard: a Transfer page.** The staff draws zero and the home score as
+  *datums* and the two régimes as needles against them. First attempt drew the
+  home score as a needle too; at 0.394 against 0.336 its leader line ran straight
+  through the other mark's label. Drawing a reference the way the zero datum is
+  already drawn fixed it and says the right thing besides. The browser then
+  caught the datum label running off the right edge of the plot — it now sets to
+  whichever side has room.
+- The pooled −0.081 is on the page, in the caveats and in the smoke check.
+  Leading with +0.336 would be the flattering half-truth; leading with −0.081
+  would be the other one. `verify_deployment.py` now asserts both — the headline
+  carries the split and the caveats disclose the pooled figure (15 checks).
+
+Also corrected while here: the frontend fixtures still carried the pre-geometry
+numbers (RMSE 1.713, R² 0.442) under a docstring claiming they were copied from
+the live API. They were true when written and stopped being true on 09-08.
+
 ### Next session — pick up here
 
-**State:** All four phases done, the open items worked down, and the held-out river run. 378 backend tests + 22 frontend, lint clean, CI green, all pushed. Models are on corrected geometry (49 sections): R² 0.394, RMSE 1.785. The Naka holdout says the model transfers inside its training ranges (+0.336) and not outside them (−0.903).
+**State:** All four phases done, the open items worked down, the held-out river run *and served*. 388 backend tests + 33 frontend, lint clean, CI green, all pushed. Models are on corrected geometry (49 sections): R² 0.394, RMSE 1.785. The Naka holdout says the model transfers inside its training ranges (+0.336) and not outside them (−0.903), and `GET /holdout` plus the dashboard's Transfer page now say so to anyone who never opens the docs.
 
 **Next, in order of value:**
-1. ~~Watch the first CI run~~ — **done 09-08, and it had been red since it was added.** Both images build and the API container serves; the failure was `openpyxl`, used by the loader and never declared, which was installed here as somebody else's transitive dependency. Eight red runs went unread because I assumed CI had never run rather than checking.
-2. Cheap and worth it: re-derive reach hydraulics from the sweep inside `/scenario_run` (see below).
-3. Optional polish: dark mode; a shareable permalink for a state; caching `/explain` by state, since it is ~200 ms of SHAP per call.
+1. **The frontend container has still never been run.** Both images build in CI and the API container starts there, but nginx's own SPA fallback and `no-store` handling, the HEALTHCHECK loops, and a smoke run against a container that actually has trained artefacts are all unverified. No Docker daemon on this machine, so this lands as CI jobs rather than local runs. It is the last standing claim in the repo that rests on inference.
+2. Optional polish: dark mode; a shareable permalink for a scenario state.
+3. If the Naka is ever to be *served* rather than only reported, it needs a decision first, not code: serving a second model would blur the finding that this one model has a measured domain. The transfer evidence is the honest version, and it is now shipped.
 
 **Known debt:**
 - ~~4 cross-sections cut through constrictions~~ — **excluded 09-08** after measuring their effect (1.10 mg/L, 64% of RMSE). The sweep, both models and every documented number are now on 49 sections.
@@ -232,7 +270,8 @@ same hydraulics says the geometry is adequate and the transfer gap is real.
 - Model beats persistence by **0.009 R²** and loses on MAE; predicted range 4.2–10.2 mg/L against an observed 3.0–17.0, so it cannot flag hypoxic events. Both got worse when the geometry was corrected.
 - HSI labels remain synthetic; only the falsification test constrains them.
 - The model's domain is its training range, not "rivers" — demonstrated on the Naka. Extending it needs observations from outside the Ayase's range, not a better regressor.
-- The Naka is built but not served: its sweep and geometry exist, no model is trained on it, and the API knows only the Ayase.
+- ~~The Naka is built but not served~~ — **its result is served as of 09-10** (`GET /holdout`, dashboard Transfer page). Still true that no model is trained on it and the API predicts only for the Ayase, which is deliberate: the finding is that one model has a measured domain, and a second model would blur it.
+- `data/processed/holdout_naka.json` is the one derived file tracked in git. Everything else under `data/` is ignored, but regenerating this one needs HEC-RAS on Windows and 28 GB of LAS tiles, and tracking it is what lets a plain clone serve `/holdout`.
 - Both images build in CI and the API container starts there. Still unverified: the **frontend** container running, nginx's own SPA fallback and `no-store` handling, the HEALTHCHECK loops, and the full smoke suite against a container that has trained artefacts (CI has none).
 - ~~The frontend bakes its API URL in at build time~~ — **fixed 09-08**: the container entrypoint writes `/config.js` from `$API_BASE_URL` and the page reads it at load, verified by repointing a built bundle in the browser without rebuilding.
 - No auth and no TLS. `/explain` is now cached by state (~15 ms on a repeat) and capped per client, but the limit is per-process, so a shared one needs a gateway. See `docs/DEPLOYMENT.md`.

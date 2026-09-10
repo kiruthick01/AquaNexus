@@ -40,6 +40,7 @@ oxygen stress actually matters. Show them to whoever sees the number.
 | POST | `/batch_predict` | Up to 1,000 states |
 | POST | `/explain` | SHAP contributions for one state |
 | POST | `/scenario_run` | Compare a modified state against a baseline |
+| GET | `/holdout` | The model's score on a river it was never trained on |
 
 ### The environmental state
 
@@ -89,6 +90,45 @@ on `models_loaded` fails.
 
 Per model: `target`, `unit`, `model_type`, `labels`, `n_train`, `features`,
 `metrics`, `caveats`. Returns **503** when nothing is loaded.
+
+### `GET /holdout`
+
+What happened when the dissolved-oxygen model was applied, **unchanged**, to the
+Naka (中川) — a catchment reserved during the data audit and never touched until
+the model was finished. Every other generalisation number this API reports is
+*within* the Ayase, so this is the only evidence here about a different river.
+
+```bash
+curl -s localhost:8000/holdout | jq '{headline, by_evidence}'
+```
+
+```json
+{
+  "headline": "Inside the ranges it was fitted on, the unchanged Ayase model scores R² +0.336 on a river it has never seen — against +0.394 at home. Outside them it scores -0.903, worse than predicting this river's mean.",
+  "by_evidence": [
+    { "label": "inside Ayase training ranges", "n": 129, "rmse": 1.672, "r2": 0.336, "bias": -0.773 },
+    { "label": "outside (extrapolation)", "n": 63, "rmse": 2.917, "r2": -0.903, "bias": -2.340 }
+  ]
+}
+```
+
+| Field | What it carries |
+|---|---|
+| `headline` | The split reading, derived from the run that produced the numbers |
+| `pooled` | The transfer plus three references computed on the holdout river: its own mean (floor), persistence (no model at all), and the same specification fitted to it (ceiling) |
+| `by_evidence` | Split by whether every feature the row supplies falls inside the training ranges |
+| `by_station` | Per station, each flagged `in_training_range` |
+| `home_metrics` | The same model's scores on its own river |
+| `caveats` | Including the pooled R² of −0.081, which is the unflattering figure |
+
+**The pooled score is not the answer.** It averages a model working with the same
+model extrapolating, and 63 of 192 observations are outside the range the model
+was fitted on. Those are exactly the rows `/predict` marks `out_of_range`; this
+endpoint is what that flag is worth.
+
+Answers **even when no model is loaded** — the result is a record of an experiment,
+not a live capability. Returns **503** only when the result has not been generated,
+and the `detail` says to run `scripts/holdout_river.py`.
 
 ### `POST /predict`
 

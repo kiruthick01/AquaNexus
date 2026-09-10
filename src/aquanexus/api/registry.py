@@ -73,6 +73,10 @@ class ModelRegistry:
         #: hydraulics with it. Optional: without it the API still answers, using
         #: whatever the caller supplied.
         self.sweep: pd.DataFrame | None = None
+        #: The held-out river result, written by scripts/holdout_river.py.
+        #: Optional in the same way: its absence costs /holdout and nothing
+        #: else, because no prediction depends on it.
+        self.holdout: dict | None = None
         # Sync routes run in a threadpool, so two requests can race to build the
         # same explainer. Building it twice is wasteful rather than wrong, but
         # the lock keeps startup cost predictable.
@@ -84,6 +88,13 @@ class ModelRegistry:
         from aquanexus.ml.models import HabitatPredictor
 
         models_dir = models_dir or settings.MODELS_DIR
+
+        # Loaded before the manifest check on purpose: the holdout result is a
+        # record of an experiment rather than a live capability, so an API with
+        # no models can still answer what happened when this one met a river it
+        # had not seen.
+        self.holdout = self._load_holdout()
+
         manifest_path = models_dir / "manifest.json"
         if not manifest_path.is_file():
             self.error = (f"no manifest at {manifest_path}; "
@@ -142,6 +153,27 @@ class ModelRegistry:
         log.info("flow sweep: %d section(s) x %d discharge(s)",
                  sweep["river_station"].nunique(), sweep["discharge_bc"].nunique())
         return sweep
+
+    @staticmethod
+    def _load_holdout() -> dict | None:
+        """Read the held-out river result, or None if it has not been run.
+
+        Written by `scripts/holdout_river.py` in the same run that writes
+        `docs/HOLDOUT_RIVER.md`, so the served numbers and the written ones
+        cannot drift apart.
+        """
+        path = settings.PROCESSED_DIR / "holdout_naka.json"
+        if not path.is_file():
+            log.info("no holdout result at %s; /holdout will report 503", path)
+            return None
+        try:
+            evidence = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001 - a bad artefact must not stop loading
+            log.warning("holdout result could not be read: %s", exc)
+            return None
+        log.info("holdout: %s, %d observation(s)",
+                 evidence.get("river", {}).get("name", "?"), evidence.get("n", 0))
+        return evidence
 
     def reach_hydraulics(self, discharge: float) -> dict[str, float]:
         """Reach-mean depth, velocity, width and Froude number at one discharge.
