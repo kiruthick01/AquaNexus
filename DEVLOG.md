@@ -2,9 +2,12 @@
 
 **Project**: AquaNexus — Physics-Informed ML Framework for Aquatic Ecosystem Diagnosis  
 **Developer**: kiruthick01  
-**Timeline**: 2026-09-05 → 2026-09-07  
-**Status**: 🟢 Complete — one claim outstanding: neither container image has been
-built (no Docker daemon on this machine; CI builds both on its first run)  
+**Timeline**: 2026-09-05 → 2026-09-10  
+**Status**: 🟢 Complete — one claim outstanding: the **frontend container has never
+been run**. Both images build in CI and the API container starts and serves there;
+what is unverified is nginx's own SPA fallback and `no-store` handling, the
+HEALTHCHECK loops, and a smoke run against a container holding trained artefacts.
+No Docker daemon on this machine, so closing it means CI jobs, not local runs.  
 **Repository**: https://github.com/kiruthick01/aquanexus  
 
 ---
@@ -251,16 +254,38 @@ page.
 
 Also corrected while here: the frontend fixtures still carried the pre-geometry
 numbers (RMSE 1.713, R² 0.442) under a docstring claiming they were copied from
-the live API. They were true when written and stopped being true on 09-08.
+the live API. They were true when written and stopped being true on 09-08. The
+same pass fixed the stale counts quoted in `README.md`, `frontend/README.md` and
+`docs/DEPLOYMENT.md`.
+
+**Verified before pushing**, not asserted: 388 backend tests (`pytest`, exit 0),
+33 frontend (`vitest`), `ruff check src tests scripts` clean, `oxlint` clean,
+`npm run build` clean, and all 15 deployment smoke checks green against a live
+uvicorn. The Transfer page was then opened in a real Chrome against that API —
+which is where the datum-label overflow turned up, invisible in jsdom.
+
+**Commit**: `573d9c6` Serve the held-out river, don't just write it up —
+[CI green in 1m19s](https://github.com/kiruthick01/AquaNexus/actions/runs/34506173735),
+checked with `gh run list` rather than assumed.
 
 ### Next session — pick up here
 
-**State:** All four phases done, the open items worked down, the held-out river run *and served*. 388 backend tests + 33 frontend, lint clean, CI green, all pushed. Models are on corrected geometry (49 sections): R² 0.394, RMSE 1.785. The Naka holdout says the model transfers inside its training ranges (+0.336) and not outside them (−0.903), and `GET /holdout` plus the dashboard's Transfer page now say so to anyone who never opens the docs.
+**State (2026-09-10, commit `573d9c6`):** All four phases done, the open items worked down, the held-out river run *and served*. 388 backend tests + 33 frontend, lint clean, CI green, working tree clean, all pushed. Models are on corrected geometry (49 sections): R² 0.394, RMSE 1.785. The Naka holdout says the model transfers inside its training ranges (+0.336) and not outside them (−0.903), and `GET /holdout` plus the dashboard's Transfer page now say so to anyone who never opens the docs.
+
+**Where the holdout work lives**, so nobody has to search for it:
+`scripts/holdout_river.py` (writes both `docs/HOLDOUT_RIVER.md` and
+`data/processed/holdout_naka.json`) → `ModelRegistry._load_holdout` in
+`src/aquanexus/api/registry.py` → `src/aquanexus/api/routes/holdout.py` →
+`frontend/src/pages/Transfer.tsx` with `components/TransferScale.tsx`. Tests:
+`tests/test_holdout.py` and `frontend/src/test/transfer.test.tsx`.
+**If you change any holdout number, change it in the script** — the document and
+the JSON are both generated, and `test_served_numbers_match_the_written_document`
+fails if they drift apart.
 
 **Next, in order of value:**
 1. **The frontend container has still never been run.** Both images build in CI and the API container starts there, but nginx's own SPA fallback and `no-store` handling, the HEALTHCHECK loops, and a smoke run against a container that actually has trained artefacts are all unverified. No Docker daemon on this machine, so this lands as CI jobs rather than local runs. It is the last standing claim in the repo that rests on inference.
 2. Optional polish: dark mode; a shareable permalink for a scenario state.
-3. If the Naka is ever to be *served* rather than only reported, it needs a decision first, not code: serving a second model would blur the finding that this one model has a measured domain. The transfer evidence is the honest version, and it is now shipped.
+3. Making the API *predict for* the Naka — as opposed to reporting on it, which is now done — needs a decision before any code: a second trained model would blur the finding that this one has a measured domain. Deliberately not done.
 
 **Known debt:**
 - ~~4 cross-sections cut through constrictions~~ — **excluded 09-08** after measuring their effect (1.10 mg/L, 64% of RMSE). The sweep, both models and every documented number are now on 49 sections.
@@ -282,14 +307,23 @@ the live API. They were true when written and stopped being true on 09-08.
 python scripts/download_data.py                     # water quality
 python scripts/build_geometry.py --river ayasegawa  # tiles -> HEC-RAS -> run
 python scripts/train_models.py                      # both models + manifest
+python scripts/holdout_river.py                     # the Naka: doc + served JSON
 python scripts/make_figures.py                      # README figures
 uvicorn aquanexus.api.app:app --reload
-python scripts/verify_deployment.py                 # smoke-check a running API
+python scripts/verify_deployment.py                 # 15 smoke checks against a running API
 
 cd frontend && npm install && npm run dev           # dashboard on :3000
-npm run test && npm run build                       # 22 tests, then the bundle
+npm run test && npm run build                       # 33 tests, then the bundle
 ```
 Raw data (9.5 GB tiles) is gitignored but already on disk at `data/raw/`.
+
+Two notes for whoever runs these. `holdout_river.py` must come **after**
+`train_models.py` — it loads the shipped model from disk and reads the training
+ranges out of `manifest.json`, so running it against stale artefacts silently
+reports the transfer of a model that is no longer served. And every script here
+needs `PYTHONPATH=src` unless the package is installed, plus
+`PYTHONIOENCODING=utf-8` on this machine or anything printing 綾瀬川 dies in the
+cp1252 encoder rather than in the logic.
 
 
 ---
