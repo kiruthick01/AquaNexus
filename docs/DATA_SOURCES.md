@@ -167,6 +167,53 @@ still needed for hourly discharge *boundary conditions*, but not for the observa
   selecting `classification == 2`.
 - Zip → LAS expands ~2×: a 33 MB zip yields a 68 MB LAS.
 
+---
+
+## Follow-up audit — 2026-09-14
+
+Two questions were re-opened after the model shipped: where more low-flow
+observations could come from, and whether any *measured* biology exists for this
+river. Full write-up in [`BIOLOGICAL_DATA.md`](BIOLOGICAL_DATA.md); the source
+verdicts belong here.
+
+### 河川水辺の国勢調査 — MLIT/NILIM regional files ★ NEW, USED
+- **URL:** https://www.nilim.go.jp/lab/fbg/ksnkankyo/dl_00_index.html
+  (Kanto river fish: `download/slist/RT83_B01.zip`, 11.1 MB, no registration)
+- **Status:** ✅ Verified live and open. Pulled by `scripts/fish_survey.py`.
+- **Holds for the Ayase:** 286 fish records, 39 species, 4 sites, 5 survey years
+  (1998–2019), each with an individual **count** and the water temperature,
+  velocity and depth measured at the survey.
+- **Better than** the Tokyo presence/absence extract already in
+  `aquanexus.data.biology` (n = 6 for this river): abundance rather than presence,
+  four sites rather than one.
+- **Not a training label.** Five mornings across twenty-one years, and counts that
+  depend on gear and effort the census records as free text.
+- **Related:** `B02` is benthic invertebrates, same layout, not pulled yet. The
+  GIS version (`download/shape/RG83_B01.zip`) carries site coordinates and is what
+  would settle whether the surveyed sites lie inside the modelled reach.
+- **Note:** the census search UI at `www5.river.go.jp` does not resolve from this
+  machine; the bulk regional files do.
+
+### 環境省 水環境総合情報サイト, older fiscal years — REJECTED for this dataset
+- 検体値 is published for **1984–2024**, 47 prefectures — forty-one years.
+- Its record layout (`download/kousui/kousui_k_manual.pdf`) carries pH, DO, BOD,
+  COD, SS, coliforms, hexane extract, zinc, the health items and TN/TP, and
+  **neither 流量 nor 水温**.
+- This dataset joins chemistry to hydraulics *through* the discharge measured
+  beside each sample, and water temperature is the strongest single correlate of
+  the label (|r| = 0.68). A file with neither cannot extend it.
+
+### 埼玉県 公共用水域水質測定データ, older fiscal years — DOES NOT EXIST
+- The prefecture publishes the per-sample workbook on a **rolling three-year
+  basis**: R04, R05, R06, which `scripts/download_data.py` already fetches in full.
+- Earlier years (`r01`, `r02`, `r03`, `h30` filename patterns) return **404**, and
+  the index page lists three files. What survives for earlier years is PDF summary
+  reporting — annual means and 75th-percentile BOD, not samples.
+- Consequence: the low-flow band (17 of 138 observations below 2 m³/s, all from
+  `55畷橋`) grows by roughly six samples a year, each March.
+
 ### Still open
 
 - [ ] Identify MLIT gauge(s) on 綾瀬川 for hourly discharge boundary conditions (manual pull)
+- [ ] Settle whether the census survey sites (river km 8.0–15.5, all marked tidal)
+      overlap the modelled reach — `RG83_B01.zip`, reprojected to EPSG:6677

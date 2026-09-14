@@ -319,9 +319,70 @@ with the container job passing every check — read from `gh run view`, not assu
 
 **Commit**: `2a309ad` and the two before it.
 
+### 2026-09-14 (later) — a shareable scenario, and what measured biology exists
+
+Two more of the optional items, and one that turned out not to be optional at all.
+
+**Scenario permalinks.** `/scenarios` now reads and writes its whole state in the
+URL and nothing else: target, baseline, fractional changes, name. Opening a link
+re-runs the scenario against whatever is being served then, so a shared what-if
+arrives with the current model's caveats rather than as a screenshot of a number
+that has outlived its model. Encoding the *answer* would have been smaller and
+would have broken the one rule the rest of the interface is built on.
+
+Running it in a browser found what the tests could not: `clipboard.writeText`
+**never settles** while `document.visibilityState` is "hidden" - Chrome defers the
+write - so awaiting it left the copy button doing nothing, with no rejection to
+catch. Bounded at 1.2 s now, falling back to showing the URL, which is also the
+path taken on a plain http origin where `navigator.clipboard` does not exist at
+all. That is the third time running the app has found something 400 tests did not.
+
+**`scripts/check_containers.sh --trained`** mounts `./data` read-only instead of
+fabricating stand-ins. It is the one container check CI cannot make, and it is now
+one flag rather than a rewrite on whatever machine has both the artefacts and a
+daemon.
+
+**The data audit, which is the real finding.** Two questions: where more low-flow
+observations come from, and whether any measured biology exists for this river.
+Written up in `docs/BIOLOGICAL_DATA.md`; the short version:
+
+- **Low flow: nowhere, for now.** Saitama publishes the per-sample workbook -
+  the only open file carrying both discharge and water temperature beside each
+  sample - on a rolling three-year basis, and this repository already has all
+  three. The national archive at 環境省 goes back to **1984**, and its 検体値
+  layout has neither 流量 nor 水温, so forty-one years of it cannot enter a
+  dataset that joins chemistry to hydraulics through discharge. The gap stays
+  exactly what it is: 17 of 138 observations below 2 m³/s, every one from
+  `55畷橋`, growing by about six samples a year each March.
+- **Biology: more than expected.** The national census (河川水辺の国勢調査,
+  MLIT/NILIM) publishes bulk regional workbooks, and the Kanto fish file holds
+  **286 counted records for the Ayase** - 39 species, 4 sites, 5 survey years
+  from 1998 to 2019, each row carrying the water temperature, velocity and depth
+  measured at the survey. The repository's existing biological extract was
+  presence/absence with n = 6 for this river. `scripts/fish_survey.py` pulls it;
+  `biology.load_national_fish` reads it.
+
+And the part worth arguing about: **every surveyed site is marked 感潮あり -
+tidal** - fifteen records carry a negative velocity, and estuarine species
+outnumber the rest at three sites of four. The index is defined for a "lowland
+warmwater cyprinid assemblage". Either those sites are downstream of the modelled
+reach, in which case the census describes a different river from the one being
+predicted, or they are inside it, in which case both the assemblage assumption
+and the model's normal-depth downstream boundary are questionable. `内匠橋` is
+both a census site and one of the four water quality stations the model trains
+on, which is suggestive and is not a coordinate. The GIS version of the same
+download settles it and has not been pulled.
+
+Nothing in the model changed today. The habitat index is still SYNTHETIC
+everywhere it appears, and now there is a document saying precisely what it would
+take for that to stop being true.
+
+**Verified**: 404 backend tests, 46 frontend, `ruff` and `oxlint` clean, the
+permalink round trip exercised in a real Chrome against a live API.
+
 ### Next session — pick up here
 
-**State (2026-09-14, commit `2a309ad`):** All four phases done, the open items worked down, the held-out river run *and served*, and both containers now run in CI rather than only building. 398 backend tests + 33 frontend, lint clean, CI green, working tree clean, all pushed. Models are on corrected geometry (49 sections): R² 0.394, RMSE 1.785. The Naka holdout says the model transfers inside its training ranges (+0.336) and not outside them (−0.903), and `GET /holdout` plus the dashboard's Transfer page say so to anyone who never opens the docs.
+**State (2026-09-14, latest commit on `main`):** All four phases done, the open items worked down, the held-out river run *and served*, both containers run in CI rather than only building, scenarios shareable as links, and the biological data audited. 404 backend tests + 46 frontend, lint clean, CI green, working tree clean, all pushed. Models are on corrected geometry (49 sections): R² 0.394, RMSE 1.785. The Naka holdout says the model transfers inside its training ranges (+0.336) and not outside them (−0.903), and `GET /holdout` plus the dashboard's Transfer page say so to anyone who never opens the docs.
 
 **Where the container work lives**, added 09-14:
 `scripts/check_containers.sh` (runs both images; CI calls it from the
@@ -345,9 +406,13 @@ the JSON are both generated, and `test_served_numbers_match_the_written_document
 fails if they drift apart.
 
 **Next, in order of value:**
-1. **Nothing outstanding rests on inference.** The container claim closed on
-   09-14 and took two real defects with it. What is left is genuinely optional.
-2. Optional polish: dark mode; a shareable permalink for a scenario state.
+1. **Settle whether the fish census sites are inside the modelled reach.**
+   `docs/BIOLOGICAL_DATA.md` §3: download `RG83_B01.zip` from the same NILIM page,
+   reproject the survey sites to EPSG:6677, snap them to the modelled centreline.
+   It decides two things at once - whether the measured assemblage can check the
+   synthetic index at all, and whether part of the modelled reach is tidal, which
+   the normal-depth downstream boundary assumes it is not. Needs the `geo` extra.
+2. Optional polish: dark mode. (The scenario permalink landed on 09-14.)
 3. Making the API *predict for* the Naka — as opposed to reporting on it, which is now done — needs a decision before any code: a second trained model would blur the finding that this one has a measured domain. Deliberately not done.
 4. The measurement that would move the model, per the sensitivity study, is still a gauged rating curve, then low-flow observations. No amount of deployment work substitutes for either.
 
@@ -357,7 +422,7 @@ fails if they drift apart.
 - ~~`/scenario_run` holds depth/velocity/width fixed when discharge changes~~ — **fixed 09-08**: the hydraulics are re-interpolated from `ayase_flow_sweep.csv` at the scenario discharge, and `reach_top_width`, which no caller field could ever supply, no longer falls back to an imputed median on every request.
 - Scenario answers below ~2 m³/s should not be believed regardless — the model is biased −2.26 mg/L there and drought mechanisms (heat, residence time, concentrated load) are not in the feature set.
 - Model beats persistence by **0.009 R²** and loses on MAE; predicted range 4.2–10.2 mg/L against an observed 3.0–17.0, so it cannot flag hypoxic events. Both got worse when the geometry was corrected.
-- HSI labels remain synthetic; only the falsification test constrains them.
+- HSI labels remain synthetic; the falsification test and now 12 site-years of counted fish (`docs/BIOLOGICAL_DATA.md`) are all that constrain them - and the recorded assemblage at those sites is estuarine, not the cyprinid one the index assumes. Whether that is a contradiction or a different reach is open.
 - The model's domain is its training range, not "rivers" — demonstrated on the Naka. Extending it needs observations from outside the Ayase's range, not a better regressor.
 - ~~The Naka is built but not served~~ — **its result is served as of 09-10** (`GET /holdout`, dashboard Transfer page). Still true that no model is trained on it and the API predicts only for the Ayase, which is deliberate: the finding is that one model has a measured domain, and a second model would blur it.
 - `data/processed/holdout_naka.json` is the one derived file tracked in git. Everything else under `data/` is ignored, but regenerating this one needs HEC-RAS on Windows and 28 GB of LAS tiles, and tracking it is what lets a plain clone serve `/holdout`.
@@ -372,6 +437,7 @@ python scripts/download_data.py                     # water quality
 python scripts/build_geometry.py --river ayasegawa  # tiles -> HEC-RAS -> run
 python scripts/train_models.py                      # both models + manifest
 python scripts/holdout_river.py                     # the Naka: doc + served JSON
+python scripts/fish_survey.py                       # counted fish records for the Ayase
 python scripts/make_figures.py                      # README figures
 uvicorn aquanexus.api.app:app --reload
 python scripts/verify_deployment.py                 # 15 smoke checks against a running API

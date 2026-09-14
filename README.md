@@ -56,7 +56,7 @@ of this project is an exercise in finding and stitching them together:
 | **Channel bathymetry** | 埼玉県 河川点群データ (CC BY 4.0) | UAV drone **plus narrow multibeam echosounder** — includes the *submerged* bed, which topographic LiDAR cannot see |
 | **Water quality** | 環境省 水環境総合情報サイト / 埼玉県 公共用水域水質測定 | Monthly grab samples with co-measured discharge and temperature |
 | **Meteorology** | 気象庁 過去の気象データ | Air temperature, solar radiation (公共データ利用規約) |
-| **Biology** | 河川水辺の国勢調査 (東京都建設局) | Fish & benthic surveys, 1995–2024, for independent validation |
+| **Biology** | 河川水辺の国勢調査 — 東京都建設局 (presence) and MLIT/NILIM (abundance) | Fish & benthic surveys. 286 counted fish records for the Ayase across 5 survey years, with survey-time temperature, velocity and depth — validation only, never labels |
 | **Hydrology** | 国土交通省 水文水質データベース | Discharge & stage — **manual download only** (see note) |
 
 > **On `river.go.jp`:** the national hydrology database explicitly prohibits automated
@@ -504,7 +504,7 @@ Stated here rather than discovered later:
 | **Unreliable at low flow** | Under-predicts oxygen by ~2 mg/L below ≈2 m³/s. |
 | **Manning's *n* is assumed** | 0.035 channel / 0.06 overbank, not calibrated — no gauged rating curve exists for this reach. **Measured, not hand-waved:** across the plausible range 0.025–0.050 the predictions move up to 0.26 mg/L, 15% of the model's RMSE. See [`docs/MANNING_SENSITIVITY.md`](docs/MANNING_SENSITIVITY.md). |
 | **HSI labels are synthetic** | Generated here from response curves. High accuracy = function recovery. |
-| **Biology is validation only** | n = 6 for the Ayase. Too small to train on; used as an independent check. |
+| **Biology is validation only** | 12 site-years for the Ayase, five survey years over twenty-one, counts that depend on gear and effort. Too thin to train on, and the assemblage recorded at those sites is estuarine rather than the cyprinid one the index assumes — see [`docs/BIOLOGICAL_DATA.md`](docs/BIOLOGICAL_DATA.md). |
 | **4 sections were excluded** | Cut through bank where the centreline wandered. Measured at 64% of the model's error, then removed and everything retrained — see [`docs/CONSTRICTION_IMPACT.md`](docs/CONSTRICTION_IMPACT.md). |
 | **Chemistry treated as reach-uniform** | 5 stations over 27 km sampled monthly cannot support a per-section field. |
 
@@ -520,6 +520,7 @@ Stated here rather than discovered later:
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module boundaries and design decisions |
 | [`DEVLOG.md`](DEVLOG.md) | Short daily progress notes |
 | [`docs/MANNING_SENSITIVITY.md`](docs/MANNING_SENSITIVITY.md) | What the uncalibrated roughness is worth |
+| [`docs/BIOLOGICAL_DATA.md`](docs/BIOLOGICAL_DATA.md) | The measured biology that exists for this river, and what it can and cannot settle |
 | [`docs/CONSTRICTION_IMPACT.md`](docs/CONSTRICTION_IMPACT.md) | Why four cross-sections were removed |
 | [`docs/HOLDOUT_RIVER.md`](docs/HOLDOUT_RIVER.md) | The Naka: what happens on a river the model has never seen |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Running it, and the conventions a change follows |

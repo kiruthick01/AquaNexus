@@ -185,3 +185,61 @@ def test_load_all_labels_survey_type(tmp_path):
 
 def test_load_all_empty_directory(tmp_path):
     assert load_all(tmp_path).empty
+
+
+# ---------------------------------------------------------------------------
+# The national census extract (abundance)
+# ---------------------------------------------------------------------------
+
+NATIONAL_ROWS = pd.DataFrame({
+    "survey_year": [2019, 2019, 2014],
+    "river": ["綾瀬川"] * 3,
+    "site": ["内匠橋", "内匠橋", "松原大橋"],
+    "km_from": [8.0, 8.0, 14.7],
+    "km_to": [9.0, 9.0, 15.5],
+    "species_ja": ["マハゼ", "モツゴ", "ボラ"],
+    "count": [12, 3, 7],
+    "water_temp": [19.5, 19.5, 21.0],
+    "velocity_cm_s": [20.0, 20.0, 0.0],
+    "depth_cm": [100.0, 100.0, 30.0],
+})
+
+
+def national_csv(tmp_path, frame=NATIONAL_ROWS):
+    path = tmp_path / "ayase_fish_survey.csv"
+    frame.to_csv(path, index=False, encoding="utf-8")
+    return path
+
+
+def test_national_records_carry_counts_and_survey_hydraulics(tmp_path):
+    """The reason to prefer this file over the presence/absence one."""
+    from aquanexus.data.biology import load_national_fish
+
+    frame = load_national_fish(national_csv(tmp_path))
+    assert frame["count"].sum() == 22
+    assert frame["water_temp"].notna().all()
+    assert frame["velocity_cm_s"].notna().all()
+
+
+def test_a_missing_count_column_is_an_error_not_a_silent_presence_list(tmp_path):
+    """Dropping `count` would turn abundance into presence without saying so."""
+    from aquanexus.data.biology import load_national_fish
+
+    path = national_csv(tmp_path, NATIONAL_ROWS.drop(columns=["count"]))
+    with pytest.raises(ValueError, match="count"):
+        load_national_fish(path)
+
+
+def test_abundance_reports_individuals_and_species_per_site_year(tmp_path):
+    from aquanexus.data.biology import abundance, load_national_fish
+
+    summary = abundance(load_national_fish(national_csv(tmp_path)))
+    takumi = summary[summary["site"] == "内匠橋"].iloc[0]
+    assert takumi["individuals"] == 15
+    assert takumi["species"] == 2
+
+
+def test_abundance_on_empty_frame():
+    from aquanexus.data.biology import abundance
+
+    assert abundance(pd.DataFrame()).empty
