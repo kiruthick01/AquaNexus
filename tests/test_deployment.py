@@ -130,7 +130,7 @@ def test_healthcheck_targets_a_real_endpoint(dockerfile):
     """The health path in the HEALTHCHECK must be one the app serves."""
     from aquanexus.api.app import app
 
-    match = re.search(r"http://localhost:8000(/\w+)", dockerfile)
+    match = re.search(r"http://127\.0\.0\.1:8000(/\w+)", dockerfile)
     assert match, "HEALTHCHECK no longer probes an HTTP path"
     # The OpenAPI schema rather than app.routes: included routers are wrapped
     # objects in current FastAPI, and the schema is what is actually served.
@@ -482,3 +482,22 @@ def test_the_frontend_probe_uses_options_busybox_wget_has(frontend_dockerfile):
     assert used <= BUSYBOX_WGET_OPTIONS, (
         f"BusyBox wget rejects {sorted(used - BUSYBOX_WGET_OPTIONS)}"
     )
+
+
+def test_probes_use_the_loopback_address_rather_than_a_name(dockerfile,
+                                                           frontend_dockerfile):
+    """Regression: the frontend probe was refused by a server that was serving.
+
+    Both servers bind IPv4 - uvicorn on 0.0.0.0, nginx with a bare `listen 80` -
+    and Docker's /etc/hosts maps "localhost" to ::1 as well as 127.0.0.1. The
+    BusyBox client took the IPv6 address first and got connection refused, while
+    every request on the published port succeeded. Naming the address removes
+    the resolver from the probe.
+    """
+    for name, source in (("api", dockerfile), ("frontend", frontend_dockerfile)):
+        probe = re.search(r"CMD (?:wget|python)[^\n]*", source)
+        assert probe, f"the {name} HEALTHCHECK no longer runs a probe"
+        assert "localhost" not in probe.group(0), (
+            f"the {name} probe resolves a name that includes ::1"
+        )
+        assert "127.0.0.1" in probe.group(0)

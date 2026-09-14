@@ -48,6 +48,9 @@ CMD ["nginx", "-g", "daemon off;"]
 # does NOT have --tries, which it rejects with "unrecognized option" - so the
 # probe was failing on its own arguments while nginx served every request
 # correctly, and the container reported unhealthy from the day it was written.
-# Found by scripts/check_containers.sh on its first run.
+# Found by scripts/check_containers.sh on its first run; the run after that
+# found the second half of it. `listen 80` is IPv4 only, and "localhost"
+# resolves to ::1 before 127.0.0.1 here, so the probe was refused by a
+# server that was answering every request on the published port.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD wget -q -T 3 --spider http://localhost/ || exit 1
+    CMD wget -q -T 3 --spider http://127.0.0.1/ || exit 1

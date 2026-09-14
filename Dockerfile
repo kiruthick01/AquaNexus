@@ -33,7 +33,10 @@ USER aquanexus
 
 EXPOSE 8000
 
+# 127.0.0.1, not localhost: the server binds IPv4 only, and "localhost"
+# resolves to ::1 first in these images. The frontend probe failed exactly
+# that way - connection refused to a container that was serving fine.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import httpx,sys; sys.exit(0 if httpx.get('http://localhost:8000/health').status_code==200 else 1)"
+    CMD python -c "import httpx,sys; sys.exit(0 if httpx.get('http://127.0.0.1:8000/health').status_code==200 else 1)"
 
 CMD ["uvicorn", "aquanexus.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
