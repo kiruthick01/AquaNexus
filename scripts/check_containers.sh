@@ -23,8 +23,22 @@
 #     docker build -t aquanexus-frontend:dev ./frontend
 #     scripts/check_containers.sh aquanexus-api:dev aquanexus-frontend:dev
 #
+# The API container is fed fabricated stand-in artefacts by default, because CI
+# can have no others. On a machine that has the *trained* ones, add --trained:
+#
+#     scripts/check_containers.sh --trained aquanexus-api:dev aquanexus-frontend:dev
+#
+# which mounts ./data read-only instead, so the checks run against the models
+# that are actually served and nothing can write over them.
+#
 # Exit status is 0 only if every check passed.
 set -uo pipefail
+
+TRAINED=0
+if [ "${1:-}" = "--trained" ]; then
+  TRAINED=1
+  shift
+fi
 
 API_IMAGE="${1:-aquanexus-api:ci}"
 WEB_IMAGE="${2:-aquanexus-frontend:ci}"
@@ -34,6 +48,13 @@ WEB_PORT="${WEB_PORT:-8080}"
 PYTHON="${PYTHON:-python}"
 API_NAME="aquanexus-api-check"
 WEB_NAME="aquanexus-web-check"
+
+if ! command -v docker > /dev/null 2>&1; then
+  # Without this the run is 20 minutes of health-check polling against a client
+  # that is not installed, ending in failures that name the wrong thing.
+  echo "docker is not installed; this script needs a daemon. See docs/DEPLOYMENT.md." >&2
+  exit 2
+fi
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d)"
@@ -97,25 +118,38 @@ headers_of() { curl -sS -o /dev/null -D - "$1"; }
 
 printf '\nAPI container: %s\n' "$API_IMAGE"
 
-# World-writable because the image runs as its own unprivileged user, whose uid
-# does not match the one that owns the checkout.
-mkdir -p "$WORK/data/processed" "$WORK/data/models"
-cp "$REPO/data/processed/holdout_naka.json" "$WORK/data/processed/"
-chmod -R 777 "$WORK/data"
-
-# Fabricated artefacts, made *by the image* - which is itself the check that
-# scripts/ is in it and that DATA_DIR resolves to the mount rather than into
-# site-packages. See scripts/make_stand_in_artifacts.py for what they are not.
-if docker run --rm -v "$WORK/data:/app/data" "$API_IMAGE" \
-     python scripts/make_stand_in_artifacts.py > "$WORK/stand-in.log" 2>&1; then
-  pass "stand-in artefacts written by the image into the mount"
+if [ "$TRAINED" -eq 1 ]; then
+  # Read-only, so a container check can never write over artefacts that took a
+  # Windows-only HEC-RAS run and 9.5 GB of point cloud to produce. The API only
+  # reads them, and this is the one check CI cannot make.
+  if [ ! -f "$REPO/data/models/manifest.json" ]; then
+    printf '  [FAIL] --trained given, but %s/data/models has no manifest.json\n' "$REPO"
+    exit 1
+  fi
+  MOUNT="$REPO/data:/app/data:ro"
+  printf '  [INFO] mounting the trained artefacts read-only\n'
 else
-  fail "the image could not write stand-in artefacts"
-  tail -20 "$WORK/stand-in.log"
+  # World-writable because the image runs as its own unprivileged user, whose uid
+  # does not match the one that owns the checkout.
+  mkdir -p "$WORK/data/processed" "$WORK/data/models"
+  cp "$REPO/data/processed/holdout_naka.json" "$WORK/data/processed/"
+  chmod -R 777 "$WORK/data"
+  MOUNT="$WORK/data:/app/data"
+
+  # Fabricated artefacts, made *by the image* - which is itself the check that
+  # scripts/ is in it and that DATA_DIR resolves to the mount rather than into
+  # site-packages. See scripts/make_stand_in_artifacts.py for what they are not.
+  if docker run --rm -v "$MOUNT" "$API_IMAGE" \
+       python scripts/make_stand_in_artifacts.py > "$WORK/stand-in.log" 2>&1; then
+    pass "stand-in artefacts written by the image into the mount"
+  else
+    fail "the image could not write stand-in artefacts"
+    tail -20 "$WORK/stand-in.log"
+  fi
 fi
 
 docker run -d --name "$API_NAME" -p "${API_PORT}:8000" \
-  -v "$WORK/data:/app/data" "$API_IMAGE" > /dev/null
+  -v "$MOUNT" "$API_IMAGE" > /dev/null
 wait_for_health "$API_NAME" 120
 
 health="$(body "$API_URL/health")"

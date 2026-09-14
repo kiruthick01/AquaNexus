@@ -10,7 +10,9 @@
  */
 
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 
+import { scenarioUrl, type ScenarioLink } from "../services/permalink";
 import type { EnvironmentalState, ScenarioResponse } from "../types";
 import { CaveatList, ProvenanceBadge } from "./Provenance";
 
@@ -34,27 +36,36 @@ const ADJUSTABLE: { key: keyof EnvironmentalState; label: string }[] = [
 
 interface Props {
   baseline: EnvironmentalState;
-  onRun: (
-    modifications: Record<string, number>,
-    name: string,
-  ) => Promise<ScenarioResponse | undefined>;
+  /** Fractional changes, owned by the page so the URL can carry them. */
+  modifications: Record<string, number>;
+  onModificationsChange: (modifications: Record<string, number>) => void;
+  name: string;
+  onNameChange: (name: string) => void;
+  /** The whole scenario, for the shareable link. */
+  link: ScenarioLink;
+  onRun: () => Promise<ScenarioResponse | undefined>;
   busy?: boolean;
 }
 
-export default function ScenarioBuilder({ baseline, onRun, busy }: Props) {
-  const [modifications, setModifications] = useState<Record<string, number>>({
-    discharge: -0.6,
-  });
-  const [name, setName] = useState("Drought");
+export default function ScenarioBuilder({
+  baseline,
+  modifications,
+  onModificationsChange,
+  name,
+  onNameChange,
+  link,
+  onRun,
+  busy,
+}: Props) {
   const [result, setResult] = useState<ScenarioResponse | null>(null);
 
   const applyPreset = (preset: (typeof PRESETS)[number]) => {
-    setModifications(preset.modifications);
-    setName(preset.name);
+    onModificationsChange(preset.modifications);
+    onNameChange(preset.name);
   };
 
   const run = async () => {
-    const response = await onRun(modifications, name);
+    const response = await onRun();
     if (response) setResult(response);
   };
 
@@ -106,7 +117,7 @@ export default function ScenarioBuilder({ baseline, onRun, busy }: Props) {
                 disabled={busy}
                 aria-label={`${field.label} change`}
                 onChange={(event) =>
-                  setModifications({
+                  onModificationsChange({
                     ...modifications,
                     [field.key]: Number(event.target.value),
                   })
@@ -120,11 +131,12 @@ export default function ScenarioBuilder({ baseline, onRun, busy }: Props) {
           <button type="button" onClick={run} disabled={busy}>
             {busy ? "Running…" : "Run scenario"}
           </button>
+          <ShareLink link={link} />
           <input
             aria-label="Scenario name"
             type="text"
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => onNameChange(event.target.value)}
             style={{
               font: "inherit",
               padding: "0.35rem 0.5rem",
@@ -146,6 +158,76 @@ export default function ScenarioBuilder({ baseline, onRun, busy }: Props) {
       </section>
 
       {result && <ScenarioResult result={result} />}
+    </>
+  );
+}
+
+/** How long to wait for the clipboard before showing the URL instead. */
+const CLIPBOARD_TIMEOUT_MS = 1200;
+
+/**
+ * Copy a link to this scenario.
+ *
+ * Two ways the clipboard is not there when you ask for it, both met in a real
+ * browser rather than guessed at:
+ *
+ * - `navigator.clipboard` is undefined on a plain http origin that is not
+ *   localhost - which is exactly how this would first be deployed.
+ * - `writeText` **never settles** while `document.visibilityState` is
+ *   "hidden": Chrome defers the write until the page is visible again, so
+ *   awaiting it can hang forever. A rejection would have been fine; silence is
+ *   not, because neither the success nor the failure branch ever runs and the
+ *   button just sits there.
+ *
+ * So the wait is bounded, and anything other than a prompt success falls back
+ * to showing the URL in a field to select. A share control that quietly does
+ * nothing is worse than no share control.
+ */
+function ShareLink({ link }: { link: ScenarioLink }) {
+  // The router's path, not window.location.pathname: they agree in the browser
+  // and differ under a MemoryRouter, and the one that is always right is the
+  // one the app is actually routing on.
+  const { pathname } = useLocation();
+  const [copied, setCopied] = useState(false);
+  const [shown, setShown] = useState<string | null>(null);
+
+  const share = async () => {
+    const url = scenarioUrl(link, window.location.origin, pathname);
+    const timeout = new Promise<never>((_, reject) =>
+      window.setTimeout(reject, CLIPBOARD_TIMEOUT_MS, new Error("clipboard timeout")),
+    );
+    try {
+      await Promise.race([navigator.clipboard.writeText(url), timeout]);
+      setCopied(true);
+      setShown(null);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setShown(url);
+    }
+  };
+
+  return (
+    <>
+      <button type="button" className="secondary" onClick={share}
+              title="Copies the inputs, not the answer: opening the link re-runs
+                     the scenario against the model being served then.">
+        {copied ? "Link copied" : "Copy link"}
+      </button>
+      {shown && (
+        <input
+          aria-label="Scenario link"
+          readOnly
+          value={shown}
+          onFocus={(event) => event.target.select()}
+          style={{
+            font: "inherit",
+            padding: "0.35rem 0.5rem",
+            border: "1px solid var(--rule)",
+            borderRadius: "6px",
+            flex: "1 1 100%",
+          }}
+        />
+      )}
     </>
   );
 }

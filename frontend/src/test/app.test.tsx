@@ -16,7 +16,8 @@ import * as fixtures from "./fixtures";
 
 /** Routes stubbed fetches by path, so a test only declares what it needs. */
 function stubApi(routes: Record<string, unknown>, status = 200) {
-  const spy = vi.fn(async (url: string) => {
+  const spy = vi.fn(async (url: string, init?: RequestInit) => {
+    void init;
     const path = new URL(url).pathname;
     const body = routes[path];
     if (body === undefined) {
@@ -180,6 +181,86 @@ describe("App", () => {
       within(result).getByText(/model sensitivity, not a simulation/i),
     ).toBeInTheDocument();
   });
+
+  it("opens a shared scenario with the link's state, not the defaults", async () => {
+    const user = userEvent.setup();
+    const spy = stubApi({
+      "/health": fixtures.health,
+      "/models": [fixtures.oxygenModel, fixtures.hsiModel],
+      "/scenario_run": fixtures.scenario,
+    });
+
+    renderApp(
+      "/scenarios?target=hsi&water_temp=31.5&discharge=2.5&month=8" +
+        "&m.discharge=-0.3&name=Late%20summer",
+    );
+    await screen.findByRole("region", { name: "Scenario builder" });
+
+    expect(screen.getByLabelText("Scenario name")).toHaveValue("Late summer");
+    expect(screen.getByLabelText("Discharge change")).toHaveValue("-0.3");
+
+    await user.click(screen.getByRole("button", { name: "Run scenario" }));
+
+    // The request must carry what the link said, not what the form defaults to:
+    // a link that renders correctly and asks a different question is worse than
+    // one that fails.
+    await waitFor(() => {
+      const posted = spy.mock.calls.find((call) => call[0].endsWith("/scenario_run"));
+      expect(posted).toBeDefined();
+      const body = JSON.parse(posted![1]!.body as string);
+      expect(body.target).toBe("hsi");
+      expect(body.scenario_name).toBe("Late summer");
+      expect(body.baseline.water_temp).toBe(31.5);
+      expect(body.baseline.discharge).toBe(2.5);
+      expect(body.modifications).toEqual({ discharge: -0.3 });
+    });
+  });
+
+  it("copies a link to the scenario rather than to its answer", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn(async (_text: string) => {});
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    stubApi({
+      "/health": fixtures.health,
+      "/models": [fixtures.oxygenModel, fixtures.hsiModel],
+    });
+
+    renderApp("/scenarios");
+    await screen.findByRole("region", { name: "Scenario builder" });
+
+    await user.click(screen.getByRole("button", { name: "Copy link" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    const url = writeText.mock.calls[0]![0];
+    expect(url).toContain("/scenarios?");
+    expect(url).toContain("m.discharge=-0.6");
+    expect(url).not.toContain("prediction");
+  });
+
+  it("shows the link when the clipboard never answers", async () => {
+    // Regression, found in a real browser: Chrome defers clipboard writes while
+    // the document is hidden, and writeText then never settles - so awaiting it
+    // left the button doing nothing at all, with no error to catch. Real timers
+    // here: the component races a real 1.2 s timeout, and faking them fights
+    // userEvent for the same clock.
+    const user = userEvent.setup();
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      clipboard: { writeText: () => new Promise(() => {}) },
+    });
+    stubApi({
+      "/health": fixtures.health,
+      "/models": [fixtures.oxygenModel, fixtures.hsiModel],
+    });
+
+    renderApp("/scenarios");
+    await screen.findByRole("region", { name: "Scenario builder" });
+
+    await user.click(screen.getByRole("button", { name: "Copy link" }));
+
+    const field = await screen.findByLabelText("Scenario link", {}, { timeout: 4000 });
+    expect((field as HTMLInputElement).value).toContain("m.discharge=-0.6");
+  }, 10000);
 
   it("warns before running a drought the model cannot answer", async () => {
     stubApi({

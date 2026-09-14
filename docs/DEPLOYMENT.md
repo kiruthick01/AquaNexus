@@ -156,6 +156,17 @@ mean anything. The real artefacts are build outputs of 9.5 GB of point cloud and
 a Windows-only HEC-RAS run, and cannot be in CI. Every stand-in manifest carries
 `"stand_in": true` and every model's first caveat begins `STAND-IN ARTEFACT`.
 
-**Still not verified:** a container against the *trained* artefacts (only the
-development machine has them), TLS, and anything about a real deployment target
-— see the limits above.
+On a machine that has the trained artefacts and a daemon, the same script runs
+against them instead of the stand-ins:
+
+```bash
+docker build -t aquanexus-api:dev . && docker build -t aquanexus-frontend:dev ./frontend
+scripts/check_containers.sh --trained aquanexus-api:dev aquanexus-frontend:dev
+```
+
+`--trained` mounts `./data` **read-only**, so the check cannot write over
+artefacts that took a Windows-only HEC-RAS run to produce.
+
+**Still not verified:** that same run — this machine has the artefacts and no
+Docker — plus TLS and anything about a real deployment target; see the limits
+above.

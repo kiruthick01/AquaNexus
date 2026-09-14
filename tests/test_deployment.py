@@ -501,3 +501,18 @@ def test_probes_use_the_loopback_address_rather_than_a_name(dockerfile,
             f"the {name} probe resolves a name that includes ::1"
         )
         assert "127.0.0.1" in probe.group(0)
+
+
+def test_the_container_check_can_run_against_the_trained_artefacts(container_check):
+    """The one check CI cannot make, available in one flag on a machine with a daemon.
+
+    Read-only, because the artefacts took a Windows-only HEC-RAS run over 9.5 GB
+    of point cloud to produce and a container check is not worth risking them.
+    """
+    assert "--trained" in container_check
+    assert "/app/data:ro" in container_check, "the trained mount must be read-only"
+
+
+def test_the_container_check_stops_early_without_a_daemon(container_check):
+    """Otherwise it is twenty minutes of polling a client that is not installed."""
+    assert "command -v docker" in container_check

@@ -43,6 +43,7 @@ src/
 ├── App.tsx                  shell, routes, degraded-backend banner
 ├── useModels.ts             /health + /models, fetched once and shared
 ├── services/api.ts          typed client (fetch, no axios)
+├── services/permalink.ts    scenario <-> URL, so a what-if can be shared
 ├── types.ts                 mirrors aquanexus.api.schemas
 ├── components/
 │   ├── Provenance.tsx       badge, caveat list, error banner
@@ -66,6 +67,17 @@ mocking in every component test for no benefit.
 need a framework, and the tokens in `styles.css` are the same ink, accent and
 cool blue that `scripts/make_figures.py` draws the README figures with — so the
 app and the plots read as one project.
+
+**A scenario permalink carries inputs, never results.** The URL holds the
+target, the baseline state and the fractional changes; opening it asks the API
+again. Encoding the answer would have been smaller and would have let a number
+outlive the model that produced it - the one thing every other part of this
+interface is built to prevent. The whole baseline is written out even where it
+matches the default, because the default is a chosen state that has moved once
+already. `navigator.clipboard` is not always there to copy it with: it is absent
+on a plain http origin that is not localhost, and `writeText` never settles
+while the tab is hidden, so the wait is bounded and anything else falls back to
+showing the URL to select.
 
 **Inline SVG, not a chart library.** Two chart types, both simple, both needing
 custom annotation (the collinearity marks, the out-of-range colouring). A charting

@@ -362,6 +362,11 @@ Design decisions worth noting:
 - **`/holdout` answers even when no model is loaded.** The transfer result is a
   record of an experiment rather than a live capability, so a degraded API can
   still say what happened when this model met a river it had not seen.
+- **A scenario is shareable as a link, and the link carries the question rather
+  than the answer.** `/scenarios?...` encodes the target, the baseline and the
+  changes; opening it re-runs them against whatever is being served now, so the
+  reader gets the current model's number with the current model's caveats
+  attached instead of a figure frozen at the moment somebody pressed copy.
 
 Full reference: [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md).
 
