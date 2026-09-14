@@ -44,5 +44,10 @@ EXPOSE 80
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
 
+# BusyBox wget, not GNU wget: this image is Alpine. It has --spider and -q and
+# does NOT have --tries, which it rejects with "unrecognized option" - so the
+# probe was failing on its own arguments while nginx served every request
+# correctly, and the container reported unhealthy from the day it was written.
+# Found by scripts/check_containers.sh on its first run.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
+    CMD wget -q -T 3 --spider http://localhost/ || exit 1

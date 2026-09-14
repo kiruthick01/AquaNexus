@@ -64,14 +64,27 @@ wait_for_health() {  # wait_for_health <container> <seconds>
     status="$(docker inspect --format '{{.State.Health.Status}}' "$name" 2>/dev/null || echo missing)"
     case "$status" in
       healthy) printf '  [PASS] %s HEALTHCHECK reports healthy after %ds\n' "$name" "$waited"; return 0 ;;
-      unhealthy) printf '  [FAIL] %s HEALTHCHECK reports unhealthy\n' "$name"; failures=$((failures + 1)); return 1 ;;
+      unhealthy)
+        printf '  [FAIL] %s HEALTHCHECK reports unhealthy\n' "$name"
+        health_log "$name"
+        failures=$((failures + 1))
+        return 1 ;;
     esac
     sleep 2
     waited=$((waited + 2))
   done
   printf '  [FAIL] %s never became healthy (%s after %ds)\n' "$name" "$status" "$limit"
+  health_log "$name"
   failures=$((failures + 1))
   return 1
+}
+
+health_log() {  # health_log <container>
+  # What the probe itself said. Without this the failure is the word
+  # "unhealthy", which does not distinguish a service that is down from a probe
+  # that is wrong - and the first time this script ran, it was the probe.
+  docker inspect --format '{{range .State.Health.Log}}    exit {{.ExitCode}}: {{.Output}}{{end}}' \
+    "$1" 2>/dev/null | head -10
 }
 
 body() { curl -sS "$@"; }

@@ -10,7 +10,9 @@ the image is actually laid out.
 
 That is not a substitute for `docker build`. It is the part of the verification
 that does not need one, and it catches the failures that would otherwise only
-appear on the machine of whoever first tries to deploy this.
+appear on the machine of whoever first tries to deploy this. The rest - what
+only a *running* container shows - is `scripts/check_containers.sh`, which CI
+runs after the builds; the last section here is what keeps the two in step.
 """
 
 from __future__ import annotations
@@ -454,3 +456,29 @@ def test_the_stand_in_manifest_matches_the_trained_one(tmp_path, monkeypatch):
     for name, meta in real["models"].items():
         assert set(meta) == set(stand_in["models"][name]), f"{name} manifest fields differ"
         assert meta["features"] == stand_in["models"][name]["features"]
+
+
+#: Long options BusyBox wget accepts. The Alpine image has BusyBox, not GNU
+#: wget, and anything outside this set is rejected as "unrecognized option" -
+#: which makes the probe fail while the server it probes is perfectly healthy.
+BUSYBOX_WGET_OPTIONS = {
+    "--continue", "--spider", "--quiet", "--output-document", "--header",
+    "--post-data", "--post-file", "--proxy", "--user-agent",
+    "--no-check-certificate", "--directory-prefix", "--passive-ftp",
+}
+
+
+def test_the_frontend_probe_uses_options_busybox_wget_has(frontend_dockerfile):
+    """Regression: --tries made the frontend container permanently unhealthy.
+
+    nginx served every request correctly; the HEALTHCHECK failed on its own
+    arguments. Nothing caught it because nothing had ever run the container -
+    `docker build` does not execute a HEALTHCHECK.
+    """
+    match = re.search(r"CMD wget ([^\n]*)", frontend_dockerfile)
+    assert match, "the frontend HEALTHCHECK no longer probes with wget"
+
+    used = {word.split("=")[0] for word in match.group(1).split() if word.startswith("--")}
+    assert used <= BUSYBOX_WGET_OPTIONS, (
+        f"BusyBox wget rejects {sorted(used - BUSYBOX_WGET_OPTIONS)}"
+    )
