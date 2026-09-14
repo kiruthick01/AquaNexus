@@ -68,13 +68,18 @@ jobs:
         run: npm run test
 
   containers:
-    name: Container builds
+    name: Container builds and runtime
     runs-on: ubuntu-latest
     # Docker is not installed on the development machine, so this job is the
-    # first place the images are actually built. It is the check that the
-    # invariants in tests/test_deployment.py cannot make on their own.
+    # only place the images are built and run. It is the check that the
+    # invariants in tests/test_deployment.py cannot make on their own: those
+    # read the Dockerfiles, this runs what they produce.
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - name: Build the API image
         run: docker build -t aquanexus-api:ci .
@@ -82,25 +87,12 @@ jobs:
       - name: Build the frontend image
         run: docker build -t aquanexus-frontend:ci ./frontend
 
-      - name: Start the API and check it answers
-        run: |
-          docker run -d --name api -p 8000:8000 \
-            -v "${{ github.workspace }}/data:/app/data" aquanexus-api:ci
-          for attempt in $(seq 1 30); do
-            if curl -sf http://localhost:8000/health > /dev/null; then break; fi
-            sleep 2
-          done
-          curl -sf http://localhost:8000/health
-
-      - name: Smoke-check the running service
-        # Without trained models the API starts degraded, which the script
-        # reports as a failure. That is correct: CI has no artefacts, so only
-        # the reachability half can pass here, and the run records which.
-        continue-on-error: true
+      - name: Run both containers and check them
+        # CI has no trained models - they are build outputs of 9.5 GB of point
+        # cloud and a Windows-only HEC-RAS run - so the script has the API image
+        # fabricate a stand-in set first. That is what lets the smoke suite run
+        # against a loaded service rather than a degraded one; every number in
+        # it is meaningless and labelled as such.
         run: |
           python -m pip install httpx
-          python scripts/verify_deployment.py --url http://localhost:8000
-
-      - name: API logs
-        if: always()
-        run: docker logs api || true
+          bash scripts/check_containers.sh aquanexus-api:ci aquanexus-frontend:ci

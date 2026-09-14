@@ -15,7 +15,10 @@ appear on the machine of whoever first tries to deploy this.
 
 from __future__ import annotations
 
+import importlib.util
+import json
 import re
+import sys
 import tomllib
 from pathlib import Path
 
@@ -35,6 +38,15 @@ def dockerfile() -> str:
 @pytest.fixture(scope="module")
 def compose() -> str:
     return COMPOSE.read_text(encoding="utf-8")
+
+
+def load_script(name: str):
+    """Import a script by path: `scripts/` is entry points, not a package."""
+    path = ROOT / "scripts" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def copied_sources(dockerfile: str) -> list[str]:
@@ -295,3 +307,150 @@ def test_compose_mounts_data_because_the_image_carries_no_models(dockerfile, com
     """
     assert not any(source.startswith("data") for source in copied_sources(dockerfile))
     assert "./data:/app/data" in compose
+
+
+# ---------------------------------------------------------------------------
+# Running the containers
+# ---------------------------------------------------------------------------
+#
+# Everything above reads the build files. `scripts/check_containers.sh` runs
+# what they produce, which is where the silent failures live - a mount that
+# resolves into site-packages, an nginx that 404s a client route, a HEALTHCHECK
+# whose arithmetic never converges. It needs a daemon, so it runs in CI. These
+# tests hold the two halves together: that the workflow actually calls it, that
+# it covers every route nginx is configured to treat specially, and that the
+# stand-in artefacts it feeds the container cannot be mistaken for trained ones.
+
+WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+CONTAINER_CHECK = ROOT / "scripts" / "check_containers.sh"
+STAND_IN = ROOT / "scripts" / "make_stand_in_artifacts.py"
+
+
+@pytest.fixture(scope="module")
+def container_check() -> str:
+    return CONTAINER_CHECK.read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
+def workflow() -> str:
+    return WORKFLOW.read_text(encoding="utf-8")
+
+
+def test_ci_builds_and_then_runs_both_images(workflow, container_check):
+    """A build that is never run proves the image compiles, and nothing else."""
+    assert "docker build -t aquanexus-api:ci ." in workflow
+    assert "docker build -t aquanexus-frontend:ci ./frontend" in workflow
+    assert "scripts/check_containers.sh" in workflow, (
+        "CI builds the images without running them"
+    )
+
+
+def test_the_container_check_runs_the_frontend_image(container_check):
+    """The frontend container is the half that had never been started at all."""
+    assert "-e API_BASE_URL=" in container_check
+    assert ":80 " in container_check or ':80"' in container_check
+
+
+def test_the_container_check_covers_every_special_nginx_location(container_check):
+    """A location with its own rules needs its own check, or the rules are untested."""
+    config = (FRONTEND / "nginx.conf").read_text(encoding="utf-8")
+    for location in re.findall(r"location\s+=?\s*(/\S*)\s*\{", config):
+        if location == "/":
+            assert "/no/such/page" in container_check, "the SPA fallback is unchecked"
+            continue
+        assert location in container_check, f"nothing checks the {location} rules"
+
+
+def test_the_container_check_waits_for_the_healthcheck(container_check):
+    """Polling /health with curl says nothing about the HEALTHCHECK in the image.
+
+    The interval, timeout, start period and retry count are only exercised by
+    the daemon, and they are what an orchestrator restarts a container over.
+    """
+    assert "State.Health.Status" in container_check
+    assert "healthy" in container_check
+
+
+def test_stand_in_artefacts_cannot_be_mistaken_for_trained_ones():
+    """They exist to be loaded by a container, and to be obvious about it."""
+    source = STAND_IN.read_text(encoding="utf-8")
+    assert "STAND-IN ARTEFACT" in source
+    assert '"stand_in": True' in source
+
+
+def test_the_real_manifest_never_claims_to_be_a_stand_in():
+    """The flag is only meaningful if the trained manifest never carries it."""
+    from aquanexus.config import settings
+
+    manifest_path = settings.MODELS_DIR / "manifest.json"
+    if not manifest_path.is_file():
+        pytest.skip("no trained manifest; run scripts/train_models.py")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert "stand_in" not in manifest
+
+
+def test_stand_in_artefacts_load_and_refuse_to_overwrite(tmp_path, monkeypatch):
+    """End to end, because the schema is the point: what CI mounts must load.
+
+    Runs the generator against a temporary data directory, loads the result
+    through the API's own registry, and then runs it a second time to check it
+    will not overwrite artefacts that are already there - which is what stops
+    somebody fabricating over a trained model on a machine that has one.
+    """
+    from aquanexus.api.registry import ModelRegistry
+    from aquanexus.config import settings
+
+    for name in ("DATA_DIR", "RAW_DIR", "PROCESSED_DIR", "MODELS_DIR",
+                 "HECRAS_DIR", "CACHE_DIR"):
+        target = tmp_path if name == "DATA_DIR" else tmp_path / name.split("_")[0].lower()
+        monkeypatch.setattr(settings, name, target)
+
+    generator = load_script("make_stand_in_artifacts")
+    monkeypatch.setattr(sys, "argv", ["make_stand_in_artifacts.py"])
+    assert generator.main() == 0
+
+    manifest = json.loads((settings.MODELS_DIR / "manifest.json").read_text("utf-8"))
+    assert manifest["stand_in"] is True
+    for meta in manifest["models"].values():
+        assert meta["caveats"][0].startswith("STAND-IN ARTEFACT")
+
+    registry = ModelRegistry().load(settings.MODELS_DIR)
+    assert registry.error is None
+    assert {"dissolved_oxygen", "hsi"} == set(registry.models)
+    for model in registry.models.values():
+        assert model.background is not None, "SHAP would explain a request against itself"
+        assert model.collinear_pairs
+
+    # Second run, no --force: refuses, and leaves what is there alone.
+    before = (settings.MODELS_DIR / "manifest.json").read_bytes()
+    assert generator.main() == 1
+    assert before == (settings.MODELS_DIR / "manifest.json").read_bytes()
+
+
+def test_the_stand_in_manifest_matches_the_trained_one(tmp_path, monkeypatch):
+    """Same fields, because the same code writes both.
+
+    Skipped without trained artefacts. Where they exist, this is what stops the
+    container check from passing against a shape the real deployment never has.
+    """
+    from aquanexus.config import settings
+
+    real_path = settings.MODELS_DIR / "manifest.json"
+    if not real_path.is_file():
+        pytest.skip("no trained manifest; run scripts/train_models.py")
+    real = json.loads(real_path.read_text(encoding="utf-8"))
+
+    for name in ("DATA_DIR", "RAW_DIR", "PROCESSED_DIR", "MODELS_DIR",
+                 "HECRAS_DIR", "CACHE_DIR"):
+        target = tmp_path if name == "DATA_DIR" else tmp_path / name.split("_")[0].lower()
+        monkeypatch.setattr(settings, name, target)
+
+    generator = load_script("make_stand_in_artifacts")
+    monkeypatch.setattr(sys, "argv", ["make_stand_in_artifacts.py"])
+    assert generator.main() == 0
+    stand_in = json.loads((settings.MODELS_DIR / "manifest.json").read_text("utf-8"))
+
+    assert set(real["models"]) == set(stand_in["models"])
+    for name, meta in real["models"].items():
+        assert set(meta) == set(stand_in["models"][name]), f"{name} manifest fields differ"
+        assert meta["features"] == stand_in["models"][name]["features"]
