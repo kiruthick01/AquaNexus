@@ -2,12 +2,14 @@
 
 **Project**: AquaNexus — Physics-Informed ML Framework for Aquatic Ecosystem Diagnosis  
 **Developer**: kiruthick01  
-**Timeline**: 2026-09-05 → 2026-09-10  
-**Status**: 🟢 Complete — one claim outstanding: the **frontend container has never
-been run**. Both images build in CI and the API container starts and serves there;
-what is unverified is nginx's own SPA fallback and `no-store` handling, the
-HEALTHCHECK loops, and a smoke run against a container holding trained artefacts.
-No Docker daemon on this machine, so closing it means CI jobs, not local runs.  
+**Timeline**: 2026-09-05 → 2026-09-14  
+**Status**: 🟢 Complete — no claim in the repo now rests on inference. Both images
+are built **and run** in CI on every push: the API loaded with artefacts and
+passing all 15 smoke checks, the frontend serving client routes, its runtime
+config and its caching rules, and both HEALTHCHECKs reaching `healthy` as the
+daemon reports it — which is how two defects in them were found. What CI loads
+are labelled stand-in artefacts; the trained ones need HEC-RAS on Windows and
+9.5 GB of point cloud, so only this machine has them.  
 **Repository**: https://github.com/kiruthick01/aquanexus  
 
 ---
@@ -268,9 +270,69 @@ which is where the datum-label overflow turned up, invisible in jsdom.
 [CI green in 1m19s](https://github.com/kiruthick01/AquaNexus/actions/runs/34506173735),
 checked with `gh run list` rather than assumed.
 
+### 2026-09-14 — the containers are run, not just built
+
+The last claim in the repo resting on inference: the frontend container had never
+been started. `docker build` had, on every push, which proves an image compiles
+and nothing else.
+
+- **`scripts/check_containers.sh`** runs both images and checks what only a
+  running container shows: a client route surviving a reload, `/config.js`
+  answering `no-store` and carrying the `API_BASE_URL` given at run time, the
+  same image repointed at a different backend by a restart, hashed assets marked
+  `immutable`, a missing asset returning 404 rather than `index.html` served as
+  JavaScript, and both `HEALTHCHECK`s reaching `healthy` *as the daemon reports
+  it*. CI runs it after the builds; a developer with a daemon runs the same file.
+- **`scripts/make_stand_in_artifacts.py`** is what lets the smoke suite run
+  against a loaded service instead of a degraded one. The trained models are
+  build outputs of 9.5 GB of point cloud and a Windows-only HEC-RAS run, so CI
+  can never have them. This fabricates inputs and pushes them through the *real*
+  trainers in `train_models.py`, so the manifest cannot drift from the real one —
+  the same functions write both. It is fabricated, not measured, and says so:
+  `"stand_in": true`, every model's first caveat begins `STAND-IN ARTEFACT`, and
+  it refuses to overwrite artefacts that already exist. Having the image write
+  them is also the check that `DATA_DIR` resolves to the mount rather than into
+  site-packages.
+
+**Two defects, both in the frontend healthcheck, found on the first two runs.**
+
+1. `wget --tries=1` — the image is Alpine, so `wget` is BusyBox, which has no
+   `--tries` and rejects it as an unrecognized option. The probe had been failing
+   on its own arguments since the day it was written. nginx was answering every
+   request correctly and the container was reported unhealthy.
+2. With that fixed: `connection refused`. `listen 80` binds IPv4 only, and
+   Docker's `/etc/hosts` maps `localhost` to `::1` as well as `127.0.0.1`. The
+   probe took the IPv6 address and was refused by a server that was working.
+   Both probes now name `127.0.0.1`; the API's was passing only because httpx
+   happened to order the addresses the other way.
+
+Neither is exotic, and neither was findable by reading. `docker build` does not
+execute a `HEALTHCHECK`, and polling `/health` from the host — which the old CI
+job did — never touches the probe the daemon actually runs. The first failure
+also reported only the word "unhealthy", so the script now prints
+`.State.Health.Log`: that distinguishes a service that is down from a probe that
+is wrong, and here it was the probe both times.
+
+**Verified**: 398 backend tests, `ruff` clean, and
+[CI green in 1m43s](https://github.com/kiruthick01/AquaNexus/actions/runs/34830585689)
+with the container job passing every check — read from `gh run view`, not assumed.
+
+**Commit**: `2a309ad` and the two before it.
+
 ### Next session — pick up here
 
-**State (2026-09-10, commit `573d9c6`):** All four phases done, the open items worked down, the held-out river run *and served*. 388 backend tests + 33 frontend, lint clean, CI green, working tree clean, all pushed. Models are on corrected geometry (49 sections): R² 0.394, RMSE 1.785. The Naka holdout says the model transfers inside its training ranges (+0.336) and not outside them (−0.903), and `GET /holdout` plus the dashboard's Transfer page now say so to anyone who never opens the docs.
+**State (2026-09-14, commit `2a309ad`):** All four phases done, the open items worked down, the held-out river run *and served*, and both containers now run in CI rather than only building. 398 backend tests + 33 frontend, lint clean, CI green, working tree clean, all pushed. Models are on corrected geometry (49 sections): R² 0.394, RMSE 1.785. The Naka holdout says the model transfers inside its training ranges (+0.336) and not outside them (−0.903), and `GET /holdout` plus the dashboard's Transfer page say so to anyone who never opens the docs.
+
+**Where the container work lives**, added 09-14:
+`scripts/check_containers.sh` (runs both images; CI calls it from the
+`containers` job in `.github/workflows/ci.yml`) and
+`scripts/make_stand_in_artifacts.py` (fabricated artefacts through the real
+trainers, so CI can run the smoke suite against a loaded API). The tests that
+keep the script and the Dockerfiles in step are the last section of
+`tests/test_deployment.py`. **Run it locally with a daemon if you ever have
+one** — `docker build` both images, then
+`scripts/check_containers.sh <api-image> <frontend-image>`; it is the same file
+CI runs, not a copy of it.
 
 **Where the holdout work lives**, so nobody has to search for it:
 `scripts/holdout_river.py` (writes both `docs/HOLDOUT_RIVER.md` and
@@ -283,9 +345,11 @@ the JSON are both generated, and `test_served_numbers_match_the_written_document
 fails if they drift apart.
 
 **Next, in order of value:**
-1. **The frontend container has still never been run.** Both images build in CI and the API container starts there, but nginx's own SPA fallback and `no-store` handling, the HEALTHCHECK loops, and a smoke run against a container that actually has trained artefacts are all unverified. No Docker daemon on this machine, so this lands as CI jobs rather than local runs. It is the last standing claim in the repo that rests on inference.
+1. **Nothing outstanding rests on inference.** The container claim closed on
+   09-14 and took two real defects with it. What is left is genuinely optional.
 2. Optional polish: dark mode; a shareable permalink for a scenario state.
 3. Making the API *predict for* the Naka — as opposed to reporting on it, which is now done — needs a decision before any code: a second trained model would blur the finding that this one has a measured domain. Deliberately not done.
+4. The measurement that would move the model, per the sensitivity study, is still a gauged rating curve, then low-flow observations. No amount of deployment work substitutes for either.
 
 **Known debt:**
 - ~~4 cross-sections cut through constrictions~~ — **excluded 09-08** after measuring their effect (1.10 mg/L, 64% of RMSE). The sweep, both models and every documented number are now on 49 sections.
@@ -297,7 +361,7 @@ fails if they drift apart.
 - The model's domain is its training range, not "rivers" — demonstrated on the Naka. Extending it needs observations from outside the Ayase's range, not a better regressor.
 - ~~The Naka is built but not served~~ — **its result is served as of 09-10** (`GET /holdout`, dashboard Transfer page). Still true that no model is trained on it and the API predicts only for the Ayase, which is deliberate: the finding is that one model has a measured domain, and a second model would blur it.
 - `data/processed/holdout_naka.json` is the one derived file tracked in git. Everything else under `data/` is ignored, but regenerating this one needs HEC-RAS on Windows and 28 GB of LAS tiles, and tracking it is what lets a plain clone serve `/holdout`.
-- Both images build in CI and the API container starts there. Still unverified: the **frontend** container running, nginx's own SPA fallback and `no-store` handling, the HEALTHCHECK loops, and the full smoke suite against a container that has trained artefacts (CI has none).
+- ~~Both images build in CI and the API container starts there; the frontend container has never been run~~ — **closed 09-14**: `scripts/check_containers.sh` runs both on every push and found two defects in the frontend HEALTHCHECK that no amount of reading had (`--tries` is not a BusyBox wget option; `localhost` resolved to `::1` against an IPv4-only listener). Still true that CI loads **stand-in** artefacts rather than the trained ones — those need HEC-RAS on Windows and 9.5 GB of point cloud — so a container against the real models is checked on this machine or not at all.
 - ~~The frontend bakes its API URL in at build time~~ — **fixed 09-08**: the container entrypoint writes `/config.js` from `$API_BASE_URL` and the page reads it at load, verified by repointing a built bundle in the browser without rebuilding.
 - No auth and no TLS. `/explain` is now cached by state (~15 ms on a repeat) and capped per client, but the limit is per-process, so a shared one needs a gateway. See `docs/DEPLOYMENT.md`.
 - The full debt register is also in `05_model_validation.ipynb` §7, so it travels with the analysis.
@@ -1243,6 +1307,24 @@ summed correctly, and said nothing — and a test asserting the sum passed on
 explainer once per model.
 **Result**: ✓ RESOLVED — and warm explanations went from 2.4 s to 190 ms.
 
+### Challenge 8: two health probes that had never been executed
+**Problem**: CI built both images on every push and started the API container,
+but nothing ran the frontend container. `docker build` does not execute a
+`HEALTHCHECK`, and the job's `curl http://localhost:8000/health` tested the
+published port rather than the probe the daemon runs. Both probes were wrong.
+**Solution**: `scripts/check_containers.sh` — run both images, read
+`.State.Health.Status` from the daemon, and check the nginx behaviour that only
+exists at run time. `scripts/make_stand_in_artifacts.py` gives the API container
+something to load, since the trained models cannot be in CI.
+**Result**: ✓ RESOLVED — two defects on the first two runs. `wget --tries=1` is
+a GNU option and this image is Alpine, so BusyBox rejected the flag and the probe
+failed on its own arguments; with that fixed, `localhost` resolved to `::1`
+against an IPv4-only `listen 80` and was refused by a server that was working.
+**Notes**: Neither was findable by reading, and both had been there since the
+files were written. The first failure reported only the word "unhealthy", which
+does not distinguish a service that is down from a probe that is wrong — the
+script now prints `.State.Health.Log`, and here it was the probe both times.
+
 ## Lessons Learned
 
 1. **Audit the data before writing the code.** Three of the plan's assumptions —
@@ -1278,7 +1360,14 @@ explainer once per model.
 9. **A log and a document have different obligations.** Current documents must be
    restated when the numbers change; a log must not, or it stops being evidence
    of what was believed when.
-10. **For next version**: a gauged rating curve first — the sensitivity study
+10. **A build is not a run.** Both images had been built on every push for a
+    week, which proves an image compiles and nothing else. The first execution
+    of the frontend container found two defects in a four-line health probe.
+    Anything that only executes in production has not been tested — and the
+    honest way to test a service that needs artefacts CI cannot have is to
+    fabricate artefacts of the right shape and label them loudly, not to accept
+    a degraded run as the check.
+11. **For next version**: a gauged rating curve first — the sensitivity study
     says so — then low-flow observations, then the Naka reach as a genuine
     held-out river.
 
@@ -1295,13 +1384,14 @@ explainer once per model.
 
 ## Final Notes
 
-**Project Status**: 🟢 **COMPLETE** — with one claim outstanding: neither
-container image has been built, because this machine has no Docker daemon. CI
-builds both on the first run.
+**Project Status**: 🟢 **COMPLETE** — nothing in the repository now rests on
+inference. The containers were the last of it: CI builds *and runs* both images
+on every push, and doing so found two defects in health probes that had never
+been executed.
 
 This proof of concept demonstrates:
 - **HEC-RAS integration** — driven through its COM automation server, from raw
-  bathymetric point clouds to a 53-section, 27.5 km model and a 12-discharge
+  bathymetric point clouds to a 49-section, 27.5 km model and a 12-discharge
   sweep
 - **A machine learning pipeline that argues with itself** — two targets, one
   synthetic and one measured, grouped cross-validation, baselines that the model
@@ -1309,22 +1399,23 @@ This proof of concept demonstrates:
 - **Full-stack delivery** — FastAPI serving provenance and caveats with every
   number, and a React dashboard built so the caveats cannot be separated from
   the number
-- **Professional practice** — 377 tests, ruff clean, CI on both halves, eight
-  documents, five executable notebooks, and a debt register that travels with
-  the analysis
+- **Professional practice** — 398 backend tests and 33 frontend, ruff clean, CI
+  that builds and runs both containers, nine documents, five executable
+  notebooks, and a debt register that travels with the analysis
 
 **What it does not demonstrate**: ecological skill. The habitat index is trained
 on labels this repository generated, and the oxygen model beats "same as last
-month" by 0.06 R² and fails at low flow. Both are stated everywhere they appear,
+month" by 0.009 R² — it was 0.06 before the geometry was corrected — loses to it
+on MAE, and fails at low flow. Both are stated everywhere they appear,
 which is the point.
 
 **Recommended for**: portfolio, GitHub showcase, IGES discussion, and as a
 worked example of reporting a modest result honestly.
 
-**Last Updated**: 2026-09-07  
-**Last Commit**: `f7b2d7d` Phase 4: React dashboard, container build, CI  
+**Last Updated**: 2026-09-14  
+**Last Commit**: `2a309ad` The frontend probe was failing on its own arguments  
 
 ---
 
 **Developer Signature**: kiruthick01  
-**Date**: 2026-09-07
+**Date**: 2026-09-14

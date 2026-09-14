@@ -414,11 +414,13 @@ cd frontend && npm install && npm run dev   # http://localhost:3000
 `src/test/provenance.test.tsx` exists to stop a refactor quietly dropping any of
 those properties. See [`frontend/README.md`](frontend/README.md).
 
-> **Container status:** both images build in CI on every push, and the API container
-> starts there and answers `/health` correctly in its degraded state (CI has no
-> trained artefacts). Nothing is built on the development machine, which has no
-> Docker. What remains unverified — the frontend container running, nginx's own
-> handling of the SPA fallback, the healthcheck loops — is listed in
+> **Container status:** both images are built **and run** in CI on every push by
+> `scripts/check_containers.sh` — the API loaded with artefacts and passing all 15
+> smoke checks, the frontend serving client routes on reload, never caching
+> `/config.js`, and repointing at a different backend on restart without a
+> rebuild. Both healthchecks are read from the daemon, which is how two defects in
+> them surfaced. Nothing is built on the development machine, which has no Docker.
+> What CI loads are labelled stand-in artefacts, not the trained models; see
 > [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ---

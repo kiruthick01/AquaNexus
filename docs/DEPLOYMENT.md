@@ -1,8 +1,8 @@
 # Deployment
 
-Two images: a FastAPI backend and an nginx-served React bundle. Both build in
-CI on every push and the API container has been started there; neither is built
-on the development machine, which has no Docker. See
+Two images: a FastAPI backend and an nginx-served React bundle. Both are built
+and **run** in CI on every push, by `scripts/check_containers.sh`; neither is
+built on the development machine, which has no Docker. See
 [Verification status](#verification-status) for exactly what that covers.
 
 ---
@@ -116,7 +116,7 @@ Honest accounting of what has actually been checked.
 
 **Verified without Docker:**
 
-- `tests/test_deployment.py` (20 tests) — every path a `COPY` reads exists, the
+- `tests/test_deployment.py` (31 tests) — every path a `COPY` reads exists, the
   extras installed are declared in `pyproject.toml`, `.dockerignore` keeps the
   README the build needs, the `CMD` import path resolves, the `HEALTHCHECK`
   probes a route the app serves, compose mounts resolve, the frontend's API URL
@@ -130,18 +130,32 @@ Honest accounting of what has actually been checked.
   and confirming in a browser that rewriting that one file repoints the app
   without a rebuild.
 
-**Verified in CI** (`containers` job, every push):
+**Verified in CI** (`containers` job, every push — `scripts/check_containers.sh`,
+which a developer with a daemon can run unchanged):
 
 - `docker build` of both images on Linux — base images, wheels and `libgomp`
   included.
-- `docker run` of the API with `./data` mounted: it starts, answers `/health` in
-  about 4 ms, and reports `degraded` naming `/app/data/models/manifest.json` —
-  which confirms `DATA_DIR` resolves to the mount rather than into site-packages.
-- The smoke script against that container: reachable, `/docs` and
-  `/openapi.json` served, malformed requests rejected as JSON.
+- The API image writing artefacts into a bind mount as its own non-root user,
+  which is also what confirms `DATA_DIR` resolves to the mount rather than into
+  site-packages.
+- `docker run` of the API against that mount: it loads both models — `status:
+  ok`, not `degraded` — and passes all 15 smoke checks, `/explain` with a
+  non-degenerate SHAP background and `/scenario_run` included.
+- `docker run` of the frontend: every client route survives a reload,
+  `/config.js` comes back `no-store` and carries the `API_BASE_URL` given at run
+  time, restarting with a different one repoints the app with no rebuild, hashed
+  assets are `immutable`, and a missing asset is a 404 rather than `index.html`
+  served as JavaScript.
+- Both `HEALTHCHECK`s reaching `healthy`, read from the daemon rather than
+  inferred from a `curl` of the published port.
 
-**Still not verified:** the frontend container *running* (it is built, not
-started), the nginx SPA fallback and `no-store` behaviour as nginx applies them,
-the healthcheck loops, the non-root user against a bind mount with real
-artefacts, and the full smoke suite against a container that has models — CI has
-no trained artefacts, so the model-dependent checks skip there by design.
+The models CI loads are **stand-ins** written by
+`scripts/make_stand_in_artifacts.py`: fabricated inputs pushed through the real
+trainers, so the manifest has the shape the API expects and none of the numbers
+mean anything. The real artefacts are build outputs of 9.5 GB of point cloud and
+a Windows-only HEC-RAS run, and cannot be in CI. Every stand-in manifest carries
+`"stand_in": true` and every model's first caveat begins `STAND-IN ARTEFACT`.
+
+**Still not verified:** a container against the *trained* artefacts (only the
+development machine has them), TLS, and anything about a real deployment target
+— see the limits above.
