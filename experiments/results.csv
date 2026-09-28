@@ -10,7 +10,12 @@ EXP-003,split_conformal_90pi,DO_FEATURES,cross_river_naka,dissolved_oxygen,,1.66
 EXP-004,none,remote_sensing,none,dissolved_oxygen,,,,,,,,,blocked_by_data_availability: 0/9 real stations (Ayase+Naka) have a recorded coordinate
 EXP-005,mlp,DO_FEATURES,station_held_out,dissolved_oxygen,,1.904,2.358,-0.057,-0.056,,,0.89,321 params; loses to mean-predictor floor; see docs/DEEP_LEARNING.md
 EXP-005,ridge_reference,DO_FEATURES,station_held_out,dissolved_oxygen,,1.274,1.785,0.394,-0.279,,,,canonical baseline, reproduced for this comparison table
-
-
-
+EXP-006,zero_shot_ridge,DO_FEATURES,cross_river_naka_subset,dissolved_oxygen,,1.496,2.075,-0.133,-1.197,,,,163-row held-out Naka subset; same unchanged Ayase model as HOLDOUT_RIVER.md
+EXP-006,domain_aligned_ridge,DO_FEATURES,cross_river_naka_subset,dissolved_oxygen,,1.496,2.034,-0.089,-1.307,,,,no target labels used; small real improvement over zero-shot
+EXP-006,fine_tuned_ridge_shrinkage1,DO_FEATURES,cross_river_naka_subset,dissolved_oxygen,,3.956,4.834,-5.149,-1.300,,,,too weak; near-independent overfit on 29 rows
+EXP-006,fine_tuned_ridge_shrinkage10,DO_FEATURES,cross_river_naka_subset,dissolved_oxygen,,4.461,5.355,-6.548,-1.484,,,,worst of sweep; shrinkage too weak for n=29 adaptation rows
+EXP-006,fine_tuned_ridge_shrinkage100,DO_FEATURES,cross_river_naka_subset,dissolved_oxygen,,3.057,3.749,-2.700,-1.182,,,,still under-regularised
+EXP-006,fine_tuned_ridge_shrinkage1000,DO_FEATURES,cross_river_naka_subset,dissolved_oxygen,,1.100,1.544,0.372,-0.091,,,,best result of any Phase 6 method tested
+EXP-006,fine_tuned_ridge_shrinkage10000,DO_FEATURES,cross_river_naka_subset,dissolved_oxygen,,1.282,1.674,0.263,0.497,,,,slightly over-shrunk toward source, pulling back toward zero-shot
+EXP-006,frozen_head_mlp,DO_FEATURES,cross_river_naka_subset,dissolved_oxygen,,1.158,1.573,0.349,0.433,,,,essentially matches best fine-tuned result; see docs/TRANSFER_LEARNING.md
 

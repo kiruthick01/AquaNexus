@@ -201,7 +201,7 @@ model, unchanged. LSTM is implemented and tested against synthetic sequences onl
 never run on real data, per Phase 1's blocker. Full results in `docs/DEEP_LEARNING.md`
 and `docs/EXPERIMENTS.md` EXP-005.
 
-### Phase 6 — Transfer learning / domain adaptation: **VIABLE, infrastructure already exists**
+### Phase 6 — Transfer learning / domain adaptation: **IMPLEMENTED**
 
 Ayase (source, n=138, 4 stations) → Naka (target, n=192, 5 stations) is already
 measured as a **zero-shot** cross-river transfer: pooled R² −0.081, in-training-range
@@ -211,6 +211,20 @@ past zero-shot: fine-tuning on a small held-in Naka slice, a frozen-feature-extr
 + target-head variant, or explicit feature-distribution alignment — and clearly
 labeling each as what it is, since "zero-shot transfer" (the existing result) is not
 "fine-tuning" and must not be conflated with it going forward.
+
+**Status update (post-implementation):** implemented in `src/aquanexus/ml/transfer.py`
+(domain alignment, L2-SP-style fine-tuning, frozen-feature-extractor + target head),
+tested in `tests/test_transfer.py`. Evaluated on a genuinely held-out 163-row Naka
+subset (`scripts/phase6_transfer_learning_experiment.py`), with a 29-row adaptation
+slice the only target information any method may use: domain alignment gave a small,
+real improvement over zero-shot (R² -0.089 vs -0.133) using no target labels. A full
+fine-tuning shrinkage sweep (1/10/100/1000/10000) found catastrophic failure at low
+shrinkage (worst R² -6.548 at shrinkage=10) and the **best result of any method
+tested** at shrinkage=1000 (R² 0.372); frozen-head adaptation of the Phase 5 MLP
+essentially matched it (R² 0.349). The governing factor across all four methods is
+how strongly the target-domain adaptation is regularised relative to the tiny (29-row)
+adaptation slice, not which named technique is used. Full analysis in
+`docs/TRANSFER_LEARNING.md` and `docs/EXPERIMENTS.md` EXP-006.
 
 ### Phase 7 — Bayesian modeling: **VIABLE**
 
@@ -245,7 +259,7 @@ src/aquanexus/
     forecasting.py   # Phase 1: lag/rolling/lead helpers, walk-forward splitter — DONE (infra only, result blocked)
     uncertainty.py   # Phase 2: bootstrap + quantile interval models — DONE; Phase 3 conformal wrapper extends this file
     deep.py          # Phase 5: MLP, LSTM (PyTorch, new optional extra) — DONE (MLP evaluated, loses to baseline; LSTM blocked with Phase 1)
-    transfer/        # Phase 6: fine-tune / frozen-extractor strategies over existing holdout
+    transfer.py      # Phase 6: domain alignment, fine-tuning, frozen-extractor+head — DONE
     bayesian/        # Phase 7: Bayesian linear + hierarchical regression
     graph/           # Phase 8: left as interface stubs only, per §4 blocker
   remote_sensing.py  # Phase 4: NDVI/NDWI/MNDWI, cloud mask, buffers, temporal match — DONE (infra only, blocked pending station geocoding)
@@ -303,4 +317,7 @@ sensing) has been implemented as infrastructure with a blocked result (0/9 real
 stations have a coordinate) — see the status update in §4 and `docs/EXPERIMENTS.md`
 EXP-004. Phase 5 (deep learning) has been implemented and evaluated — the MLP
 underperforms every classical baseline including the mean floor — see the status
-update in §4 and `docs/EXPERIMENTS.md` EXP-005. Phase 6 onward has not started.
+update in §4 and `docs/EXPERIMENTS.md` EXP-005. Phase 6 (transfer learning) has been implemented and evaluated — domain
+alignment and frozen-head adaptation helped, naive fine-tuning catastrophically
+failed at low shrinkage — see the status update in §4 and `docs/EXPERIMENTS.md`
+EXP-006. Phase 7 onward has not started.

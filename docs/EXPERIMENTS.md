@@ -279,3 +279,65 @@ and tested against synthetic sequences only.
 dataset. The canonical dissolved-oxygen model remains Ridge, unchanged by
 this phase. Added model complexity did not produce a scientifically
 meaningful improvement here - the opposite happened, and is reported as such.
+
+---
+
+## EXP-006 — Phase 6: does using target-domain information improve on zero-shot cross-river transfer?
+
+**Question:** The existing zero-shot result (Ayase Ridge, unchanged, applied
+to the Naka: pooled R² -0.081, `docs/HOLDOUT_RIVER.md`) uses no target
+information at all. Does using a little - target feature statistics, or a
+small labelled target slice - improve on it, and does the amount/kind of
+target information used change whether it helps or hurts?
+
+**Hypothesis:** Domain alignment (feature statistics only) should give a
+small, safe improvement by correcting the documented Naka/Ayase level shift.
+Fine-tuning and frozen-head adaptation, using actual target labels, should do
+better still, provided they are adequately regularised against the very
+small adaptation slice available (29 rows).
+
+**Dataset:** Ayase (138 rows, source, training only) and Naka (192 rows,
+target), split once by row (seed fixed): 29 rows for adaptation, 163 rows
+genuinely held out and never used for fitting, calibration, or shrinkage
+selection.
+
+**Features:** `DO_FEATURES`, unchanged.
+
+**Model:** Source Ridge and source MLP (Phase 5's, unchanged), adapted by
+`aquanexus.ml.transfer`'s four methods.
+
+**Validation:** All four methods scored on the identical 163-row held-out
+Naka subset; zero-shot recomputed on this subset (not the full 192 rows) for
+a fair comparison.
+
+**Results:** `scripts/phase6_transfer_learning_experiment.py` -
+see `docs/TRANSFER_LEARNING.md` for the full table.
+
+Zero-shot R² -0.133, domain-aligned R² -0.089 (small real improvement, no
+target labels used). Fine-tuning swept over shrinkage {1, 10, 100, 1000,
+10000}: catastrophic at 1/10/100 (worst R² -6.548 at shrinkage=10), then the
+**best result of any method tested** at shrinkage=1000 (R² 0.372), slightly
+declining again at shrinkage=10000 (R² 0.263). Frozen-head (MLP) scored R²
+0.349, essentially matching the best fine-tuned result.
+
+**Interpretation:** The hypothesis was partly right and partly wrong.
+Domain alignment helped, as predicted. Fine-tuning's outcome depended
+entirely on shrinkage strength: too weak (1-100) relative to the 29-row
+adaptation slice's scale, it collapsed to a near-independent overfit on 29
+noisy points and performed far worse than doing nothing; strong enough
+(1000), it became the single best method in the experiment. Frozen-head
+adaptation, whose base MLP loses badly to Ridge in-domain
+(`docs/DEEP_LEARNING.md`), matched the best fine-tuned result almost exactly
+- both succeed via strong implicit or explicit regularisation of the
+adaptation step.
+
+**Limitations:** Single seed, single adaptation/test split, single MLP
+architecture. The full shrinkage sweep is reported, not a search that
+surfaces only the winning value in isolation.
+
+**Conclusion:** Whether transfer helps or hurts is governed by how strongly
+the adaptation is regularised relative to how little target data backs it,
+not by which named technique is used. Under-regularised fine-tuning was the
+worst outcome measured, worse than zero-shot; adequately-regularised
+fine-tuning was the best. See `docs/TRANSFER_LEARNING.md` for the full
+sweep and analysis.

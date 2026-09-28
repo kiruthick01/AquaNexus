@@ -188,6 +188,18 @@ class MLPModel:
     def n_parameters(self) -> int:
         return sum(p.numel() for p in self._model.parameters())
 
+    @property
+    def torch_module(self):
+        """The fitted `torch.nn.Sequential` body - exposed so a frozen-layer
+        transfer method (`ml.transfer.FrozenHeadAdapter`) can reuse the
+        learned layers without duplicating them."""
+        return self._model
+
+    def normalize(self, X: pd.DataFrame) -> np.ndarray:
+        """Apply this model's fitted imputation/standardisation to ``X``,
+        without predicting - the same public need as :attr:`torch_module`."""
+        return self._normalize(X)
+
     def predict(self, X: pd.DataFrame) -> np.ndarray:
         torch = _require_torch()
         X_norm = self._normalize(X)
