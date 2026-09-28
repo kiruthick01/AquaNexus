@@ -146,15 +146,18 @@ as 0.521 at one station) and should not be treated as calibrated at this sample 
 Full results and per-station breakdown in `docs/UNCERTAINTY.md` and
 `docs/EXPERIMENTS.md` EXP-002.
 
-### Phase 3 — Conformal prediction: **VIABLE, with a tight-calibration-set caveat**
+### Phase 3 — Conformal prediction: **IMPLEMENTED**
 
-Split conformal needs training/calibration/test to be disjoint. With only 4 Ayase
-stations, holding out a whole station for calibration leaves 3 for training — usable,
-but calibration-set size will be small (18–48 points) and coverage estimates will
-carry wide uncertainty of their own; this must be stated, not smoothed over. The
-existing cross-river holdout (`holdout_naka.json`, n=192, 5 stations) is directly
-usable as the distribution-shift coverage check this phase requires — infrastructure
-for that comparison already exists via the `/holdout` route.
+Implemented as `SplitConformalModel` in `src/aquanexus/ml/uncertainty.py` (the same
+file as Phase 2, per the architecture note in §5), tested in
+`tests/test_uncertainty.py`, and run against real data across three regimes via
+`scripts/phase3_conformal_experiment.py`: in-domain, Ayase held-out-station, and
+cross-river (Naka). Confirmed: pooled coverage looks stable across all three regimes
+(0.857 / 0.870 / 0.849 against a 0.90 target), which is misleading on its own - the
+per-station breakdown shows a real, specific failure at exactly the station already
+known to sit outside the model's training range (46八条橋 on the Naka, coverage
+0.479) and at the Ayase's own hardest station (55畷橋, coverage 0.583). Full results
+in `docs/UNCERTAINTY.md` and `docs/EXPERIMENTS.md` EXP-003.
 
 ### Phase 4 — Satellite / remote sensing: **BLOCKED by missing station coordinates**
 
@@ -273,6 +276,7 @@ as documented-blocked infrastructure rather than results):
 
 No code was changed in this audit (§1–§7 above are Phase 0 as originally written).
 Phase 1 has since been implemented as infrastructure with a blocked result — see the
-status update in §4 and `docs/EXPERIMENTS.md` EXP-001. Phase 2 (uncertainty) has been
-implemented with real, viable results — see the status update in §4 and
-`docs/EXPERIMENTS.md` EXP-002. Phase 3 onward has not started.
+status update in §4 and `docs/EXPERIMENTS.md` EXP-001. Phase 2 (uncertainty) and
+Phase 3 (conformal prediction) have been implemented with real, viable results — see
+the status updates in §4 and `docs/EXPERIMENTS.md` EXP-002/EXP-003. Phase 4 onward
+has not started.

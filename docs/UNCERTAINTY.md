@@ -114,7 +114,7 @@ Phase 3 exists partly to do this in a distribution-free way rather than by
 tuning the quantile regressor's regularisation against the same small
 evaluation set, which would leak).
 
-## Limitations
+## Limitations (Phase 2)
 
 - n=138 across 4 stations means every coverage number above is itself
   estimated from as few as 18 test points (57綾瀬川合流点前) - a single
@@ -126,7 +126,112 @@ evaluation set, which would leak).
   and logs a warning - this does not occur in the current 4-station Ayase
   protocol (each fold leaves exactly 3 training stations) but would if a
   future dataset had 3 or fewer stations total.
-- Neither method has been evaluated under domain shift (cross-river) yet;
-  that check is Phase 3's, which reuses the existing Naka holdout
-  infrastructure (`HOLDOUT_RIVER.md`) specifically to test whether interval
-  coverage degrades under distribution shift.
+- Neither method had been evaluated under domain shift (cross-river) at this
+  point; that check is Phase 3's, below.
+
+---
+
+## Phase 3: split conformal prediction
+
+**Method** (`SplitConformalModel`, `ml/uncertainty.py`): hold out a random
+25% calibration slice of the training rows, fit Ridge on the rest, score the
+calibration slice with absolute residuals, and take the interval as point ±
+the finite-sample-corrected quantile of those residuals
+(`ceil((n+1)(1-alpha))/n`, not the naive empirical quantile - the correction
+is what gives the *marginal* coverage guarantee under exchangeability). The
+resulting interval has constant width across every row, since the score is
+unconditional - see the class docstring for why, and for the exact
+assumptions this method depends on.
+
+**Why this phase exists:** the guarantee is conditional on calibration and
+test data being *exchangeable*. This project's canonical station-held-out
+and cross-river protocols each break that assumption in a different, known
+way, so running the same conformal procedure through all three is a direct
+measurement of what that violation costs - not a hypothetical concern.
+
+### Results (real data, `scripts/phase3_conformal_experiment.py`, target 90% coverage)
+
+| Regime | n test | Coverage | Mean width (mg/L) | MAE |
+|---|---|---|---|---|
+| A. In-domain (random split, same distribution) | 28 | 0.857 | 4.720 | 0.888 |
+| B. Held-out station (leave-one-station-out, pooled) | 138 | 0.870 | 6.145 | 1.314 |
+| C. Cross-river (Naka, pooled) | 192 | 0.849 | 5.957 | 1.665 |
+
+**Held-out station, per station:**
+
+| Station | n | Coverage | Mean width |
+|---|---|---|---|
+| 52内匠橋 | 48 | 0.979 | 7.188 |
+| 54槐戸橋 | 36 | 0.972 | 5.696 |
+| 55畷橋 | 36 | 0.583 | 4.775 |
+| 57綾瀬川合流点前 | 18 | 0.944 | 7.003 |
+
+**Cross-river (Naka), per station:**
+
+| Station | n | Coverage | Mean width |
+|---|---|---|---|
+| 46八条橋 | 48 | 0.479 | 5.957 |
+| 48豊橋 | 36 | 0.972 | 5.957 |
+| 49松富橋 | 36 | 0.972 | 5.957 |
+| 50行幸橋 | 36 | 0.944 | 5.957 |
+| 51道橋 | 36 | 1.000 | 5.957 |
+
+### Interpretation
+
+**Pooled coverage looks deceptively stable across regimes** - 0.857, 0.870,
+0.849 - which at first reads as "conformal coverage barely degrades under
+distribution shift", the opposite of what `HOLDOUT_RIVER.md` found for point
+predictions (pooled zero-shot R² -0.081). It is not that finding overturned;
+it is the same failure mode this project has documented before, now visible
+in the per-station table instead of the pooled one: **46八条橋 - the one Naka
+station on a different sub-reach carrying up to 145 m³/s, twice the Ayase's
+training maximum (`HOLDOUT_RIVER.md`) - covers at 0.479, barely better than
+chance for a 90% claim**, while the four in-range Naka stations all cover at
+0.94-1.00. The pooled cross-river number (0.849) averages a station the
+interval has no business claiming 90% coverage on with four where it happens
+to. Exactly the same shape appears within the Ayase itself: 55畷橋 covers at
+0.583 while the other three Ayase stations cover at 0.94-0.98.
+
+**None of the three pooled numbers actually reaches the 0.90 target**,
+including in-domain (0.857). At n_test=28 for the in-domain regime, this gap
+is plausibly single-split sampling noise rather than a systematic shortfall
+- 24/28 successes is not a surprising draw if the true rate is 0.90 - and a
+single conformal run at small n does not distinguish the two. This is stated
+as an open question, not resolved: repeating regime A over multiple random
+calibration/test splits would be needed to tell noise from a real
+shortfall, and was not done here to keep this run's assumptions and n_test
+simple and auditable.
+
+**The in-domain per-station table is not reported above** because its
+per-station counts are as low as n=1 (one station's entire representation in
+a 28-row random test slice), making a per-station coverage number there
+meaningless rather than merely noisy; it is visible in the script's log
+output for transparency but should not be read as a finding.
+
+### Assumptions, restated from the code
+
+- Coverage is **marginal**, not conditional: it is a guarantee about the
+  average over draws of calibration and test data, not about any specific
+  test point or subgroup. The per-station breakdowns above are exactly why
+  this distinction matters in practice - the marginal number can look fine
+  while a subgroup is badly miscovered.
+- The interval is unconditional in width (constant across every row in a
+  given fit), because the nonconformity score used here is plain absolute
+  residual. A locally-adaptive score would let width vary with local
+  difficulty; not implemented here.
+- Exchangeability is the assumption every regime beyond A tests the cost of
+  violating. It does not hold, by construction, whenever calibration and
+  test data come from different stations or rivers.
+
+### Limitations (Phase 3)
+
+- Single random seed, single split per regime - coverage numbers, especially
+  for the n_test=28 in-domain regime, carry meaningful sampling variance of
+  their own that this run does not quantify.
+- `calibration_fraction=0.25` was fixed in advance rather than tuned; tuning
+  it against these same evaluation numbers would leak.
+- The out-of-range Naka station's poor coverage was expected from
+  `HOLDOUT_RIVER.md` before this experiment ran (extrapolation is already
+  known to break point predictions there); this phase's contribution is
+  showing the interval fails in the same place, not discovering a new
+  failure mode.

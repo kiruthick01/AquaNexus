@@ -16,6 +16,7 @@ from aquanexus.ml.uncertainty import (
     BootstrapIntervalModel,
     IntervalPrediction,
     QuantileIntervalModel,
+    SplitConformalModel,
     coverage,
     mean_width,
 )
@@ -97,6 +98,69 @@ def test_quantile_interval_rejects_mismatched_level(linear_data):
     model = QuantileIntervalModel(level=0.9).fit(X, y)
     with pytest.raises(ValueError, match="level"):
         model.predict_interval(X, level=0.5)
+
+
+# ---------------------------------------------------------------------------
+# SplitConformalModel
+# ---------------------------------------------------------------------------
+
+
+def test_conformal_interval_is_constant_width(linear_data):
+    X, y, _ = linear_data
+    model = SplitConformalModel(calibration_fraction=0.3, seed=0).fit(X, y)
+    result = model.predict_interval(X, level=0.9)
+    widths = result.width()
+    assert np.allclose(widths, widths[0])
+    assert widths[0] > 0
+
+
+def test_conformal_interval_widens_with_higher_level(linear_data):
+    X, y, _ = linear_data
+    model = SplitConformalModel(calibration_fraction=0.3, seed=0).fit(X, y)
+    narrow = model.predict_interval(X, level=0.5)
+    wide = model.predict_interval(X, level=0.95)
+    assert mean_width(wide) > mean_width(narrow)
+
+
+def test_conformal_coverage_near_nominal_on_iid_data():
+    # Larger i.i.d. synthetic set so the coverage check is not itself noise-
+    # dominated; a loose band, not an exact match, since even at n=400 a
+    # single conformal run's coverage is a random variable.
+    rng = np.random.default_rng(11)
+    n = 400
+    x1 = rng.uniform(0, 10, n)
+    y = 2.0 * x1 + 3.0 + rng.normal(0, 1.0, n)
+    X = pd.DataFrame({"x1": x1})
+
+    train_idx = np.arange(300)
+    test_idx = np.arange(300, 400)
+    model = SplitConformalModel(calibration_fraction=0.3, seed=5).fit(
+        X.iloc[train_idx], y[train_idx]
+    )
+    result = model.predict_interval(X.iloc[test_idx], level=0.9)
+    observed = coverage(y[test_idx], result)
+    assert 0.75 <= observed <= 1.0
+
+
+def test_conformal_raises_before_fit(linear_data):
+    X, _, _ = linear_data
+    with pytest.raises(RuntimeError):
+        SplitConformalModel().predict_interval(X)
+
+
+def test_conformal_rejects_calibration_fraction_leaving_no_training_rows(linear_data):
+    X, y, _ = linear_data
+    with pytest.raises(ValueError, match="calibration_fraction"):
+        SplitConformalModel(calibration_fraction=1.0).fit(X, y)
+
+
+def test_conformal_groups_argument_is_accepted_but_does_not_error(linear_data):
+    X, y, groups = linear_data
+    # groups is accepted for interface compatibility and intentionally unused
+    # - must not raise.
+    model = SplitConformalModel(calibration_fraction=0.3, seed=0).fit(X, y, groups=groups)
+    result = model.predict_interval(X, level=0.9)
+    assert len(result.point) == len(X)
 
 
 # ---------------------------------------------------------------------------

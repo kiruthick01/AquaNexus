@@ -38,11 +38,18 @@ the conditional quantiles of ``y`` - a different route to the same claim
 (prediction interval for one new observation), useful as a check on the
 bootstrap method rather than a replacement for it.
 
-Both implement :class:`IntervalModel`, the interface ``docs/ML_ROADMAP.md``
-asks be reusable: Phase 3 (conformal) wraps a point model with the same
-``fit``/``predict_interval`` shape, and Phase 7 (Bayesian credible intervals)
-returns the same :class:`IntervalPrediction`, so all three can be compared on
-one coverage/width table - see ``docs/UNCERTAINTY.md``.
+:class:`SplitConformalModel` (Phase 3) takes a different route again: rather
+than estimating uncertainty from the model's own behaviour, it calibrates a
+held-out residual quantile with a finite-sample correction that gives a
+*marginal* coverage guarantee under exchangeability - and, deliberately, no
+guarantee at all once calibration and test data come from different stations
+or rivers. That gap is what ``scripts/phase3_conformal_experiment.py``
+measures.
+
+All three implement :class:`IntervalModel`, the interface ``docs/ML_ROADMAP.md``
+asks be reusable, and Phase 7 (Bayesian credible intervals) will return the
+same :class:`IntervalPrediction` too, so all four can be compared on one
+coverage/width table - see ``docs/UNCERTAINTY.md``.
 
 Existing, narrower uncertainty in this codebase: ``HabitatPredictor.
 predict_with_uncertainty`` (``ml/models.py``) reports the disagreement between
@@ -259,6 +266,107 @@ class QuantileIntervalModel:
                        "quantile crossing, a known small-sample failure mode",
                        inverted, len(X))
         return IntervalPrediction(point=point, lower=lower, upper=upper, level=level)
+
+
+class SplitConformalModel:
+    """Split conformal prediction interval around a point model (Phase 3).
+
+    The procedure (Vovk, Gammerman & Shafer's split/inductive conformal
+    prediction): hold out a random calibration slice of the training rows,
+    fit the point model on the rest, score the calibration slice with
+    absolute residuals, and take the interval as the point prediction plus
+    or minus the calibration residuals' ``ceil((n+1)(1-alpha))/n`` quantile
+    - the finite-sample-corrected quantile that gives the marginal coverage
+    guarantee below, rather than the naive empirical quantile.
+
+    **Assumptions, stated explicitly because they are exactly what this
+    project's held-out-station and cross-river checks stress-test:**
+
+    * Calibration and test points must be *exchangeable* with each other
+      (informally: draws from the same distribution, in any order) given the
+      fixed, already-trained point model. Under that assumption, coverage is
+      guaranteed **marginally** - averaged over the randomness of calibration
+      and test draws - not **conditionally** for any one particular test
+      point or subgroup; a station-level coverage number can still miss the
+      target even when the marginal guarantee holds elsewhere.
+    * The guarantee does not require the point model to be correct, only that
+      the same fixed model scores calibration and test data the same way.
+    * The interval this class returns has **constant width across every
+      row**, because it scores calibration residuals unconditionally. A
+      locally-adaptive (normalized) conformal score would let width vary
+      with local difficulty; that is a natural extension, not implemented
+      here.
+    * Exchangeability is violated by construction whenever calibration and
+      test data come from different stations or rivers. That violation is
+      not a bug in this class - it is the thing
+      ``scripts/phase3_conformal_experiment.py`` measures the cost of, by
+      comparing coverage in-domain, held-out-station, and cross-river.
+
+    ``groups``, if supplied, is accepted for interface compatibility but
+    intentionally unused: this dataset carries one row per real observation
+    (unlike the HSI dataset's per-observation row groups - see
+    ``data/dataset.py``), so a random row-level calibration split does not
+    reintroduce the near-duplicate leakage ``ml/splits.py`` warns about. A
+    random split is the standard split-conformal procedure and keeps the
+    calibration set representative of the whole training distribution
+    rather than of one arbitrarily chosen station.
+    """
+
+    def __init__(self, model_type: str = "linear", calibration_fraction: float = 0.25,
+                 seed: int = 42, output_range: tuple[float, float] | None = None):
+        self.model_type = model_type
+        self.calibration_fraction = calibration_fraction
+        self.seed = seed
+        self.output_range = output_range
+        self._point_model: HabitatPredictor | None = None
+        self._scores = np.array([])
+        self._n_cal = 0
+
+    def fit(self, X: pd.DataFrame, y: pd.Series, groups: pd.Series | None = None
+           ) -> SplitConformalModel:
+        X = X.reset_index(drop=True)
+        y_arr = np.asarray(y, dtype=float)
+        n = len(X)
+
+        n_cal = max(1, int(round(n * self.calibration_fraction)))
+        if n_cal >= n:
+            raise ValueError(
+                f"calibration_fraction={self.calibration_fraction} leaves no rows "
+                f"to train the point model on ({n} total rows)"
+            )
+        if n_cal < 10:
+            log.warning("only %d calibration row(s); the conformal quantile will be "
+                       "unstable and, at very small n, may equal the single widest "
+                       "calibration residual", n_cal)
+
+        rng = np.random.default_rng(self.seed)
+        shuffled = rng.permutation(n)
+        cal_idx, train_idx = shuffled[:n_cal], shuffled[n_cal:]
+
+        config = ModelConfig(model_type=self.model_type, output_range=self.output_range,
+                             random_seed=self.seed)
+        self._point_model = HabitatPredictor(config).fit(
+            X.iloc[train_idx].reset_index(drop=True), y_arr[train_idx]
+        )
+        calibration_predictions = self._point_model.predict(X.iloc[cal_idx])
+        self._scores = np.abs(y_arr[cal_idx] - calibration_predictions)
+        self._n_cal = n_cal
+        return self
+
+    def predict_interval(self, X: pd.DataFrame, level: float = 0.9) -> IntervalPrediction:
+        if self._point_model is None:
+            raise RuntimeError("model is not fitted")
+
+        alpha = 1.0 - level
+        # Finite-sample correction: the naive quantile of the calibration
+        # residuals under-covers by a fixed amount at finite n; this is the
+        # smallest quantile level that restores the marginal guarantee.
+        q_level = min(1.0, np.ceil((self._n_cal + 1) * (1.0 - alpha)) / self._n_cal)
+        radius = float(np.quantile(self._scores, q_level, method="higher"))
+
+        point = self._point_model.predict(X)
+        return IntervalPrediction(point=point, lower=point - radius,
+                                  upper=point + radius, level=level)
 
 
 # ---------------------------------------------------------------------------

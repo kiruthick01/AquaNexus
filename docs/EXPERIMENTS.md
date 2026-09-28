@@ -123,3 +123,65 @@ dataset (bootstrap), but it is wide; a sharper interval (quantile regression)
 is not currently trustworthy at this sample size. Report the bootstrap
 interval when a calibrated claim is required, and do not present the
 quantile-regression interval as calibrated without further work.
+
+---
+
+## EXP-003 — Phase 3: does conformal prediction's coverage guarantee survive distribution shift?
+
+**Question:** Split conformal prediction guarantees marginal coverage under
+exchangeability. Does that guarantee visibly degrade when calibration and
+test data are drawn from different stations (spatial shift) or different
+rivers (the project's existing, real domain-shift benchmark)?
+
+**Hypothesis:** Pooled coverage should degrade moving from in-domain, to
+held-out-station, to cross-river; and any degradation should be worst at the
+specific subgroup already known to be out of the model's training range
+(`HOLDOUT_RIVER.md`'s 46八条橋, at up to 145 m³/s against the Ayase's 74).
+
+**Dataset:** Ayase canonical dataset (138 rows, 4 stations) for training and
+calibration in all three regimes; Naka holdout dataset (192 rows, 5 stations,
+`data/processed/holdout_naka.json`) as the cross-river test set in regime C.
+
+**Features:** `DO_FEATURES`, unchanged.
+
+**Model:** `aquanexus.ml.uncertainty.SplitConformalModel` (Ridge point model,
+25% random calibration slice, absolute-residual nonconformity score,
+finite-sample-corrected quantile), target 90% coverage.
+
+**Validation:** Three regimes, `scripts/phase3_conformal_experiment.py`:
+(A) random 80/20 in-domain split of the Ayase data; (B) leave-one-station-out
+across the 4 Ayase stations, pooled and per-station; (C) train+calibrate on
+all of Ayase, test on the independently reserved Naka holdout.
+
+**Results:**
+
+| Regime | n test | Coverage | Mean width | MAE |
+|---|---|---|---|---|
+| A. In-domain | 28 | 0.857 | 4.720 | 0.888 |
+| B. Held-out station (pooled) | 138 | 0.870 | 6.145 | 1.314 |
+| C. Cross-river Naka (pooled) | 192 | 0.849 | 5.957 | 1.665 |
+
+Full per-station tables in `docs/UNCERTAINTY.md`.
+
+**Interpretation:** The hypothesis was half right. Pooled coverage does *not*
+degrade much across regimes (0.857 → 0.870 → 0.849) - on its own, a
+misleadingly reassuring result. The per-station breakdown shows why it is
+misleading: 46八条橋 (the one out-of-training-range Naka station) covers at
+0.479, and 55畷橋 (the Ayase's own hardest station in every prior phase)
+covers at 0.583, while every other station in both regimes covers at
+0.94-1.00. The pooled number averages a station the interval fails on with
+several it happens to work on - the same shape `HOLDOUT_RIVER.md` already
+found for point predictions, now shown to affect interval coverage too.
+
+**Limitations:** Single seed, single split per regime; the in-domain regime's
+n_test=28 makes its 0.857 vs the 0.90 target hard to distinguish from
+sampling noise without repeated splits, which were not run. The
+out-of-range failure was predicted in advance from `HOLDOUT_RIVER.md`, not
+discovered by this experiment.
+
+**Conclusion:** Conformal prediction's marginal coverage guarantee held
+reasonably well *on average* across all three regimes, but that average hid
+a real, specific failure at exactly the subgroup already known to be outside
+the model's training range. A pooled coverage number is not sufficient to
+certify a conformal interval as trustworthy under distribution shift; the
+per-subgroup breakdown is required, and was not optional in this case.

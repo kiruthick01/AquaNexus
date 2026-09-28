@@ -4,4 +4,8 @@ EXP-001,none,dissolved_oxygen_lag3d,walk_forward,dissolved_oxygen,t+3,,,,,,,,blo
 EXP-001,none,dissolved_oxygen_lag7d,walk_forward,dissolved_oxygen,t+7,,,,,,,,blocked_by_data_availability: 0/138 usable rows (lag-complete and lead-target within tolerance)
 EXP-002,bootstrap_ridge_90pi,DO_FEATURES,station_held_out,dissolved_oxygen,,1.283,1.794,0.389,,0.920,6.738,,pooled over 4 stations; 500 bootstrap resamples; nested-OOF residuals
 EXP-002,quantile_regression_90pi,DO_FEATURES,station_held_out,dissolved_oxygen,,1.152,1.632,0.494,,0.703,3.411,,pooled over 4 stations; undercovers target 0.90; not trustworthy at this n
+EXP-003,split_conformal_90pi,DO_FEATURES,random_in_domain,dissolved_oxygen,,0.888,,,,0.857,4.720,,n_test=28; single split; near target, within plausible sampling noise
+EXP-003,split_conformal_90pi,DO_FEATURES,station_held_out,dissolved_oxygen,,1.314,,,,0.870,6.145,,pooled 4 stations; worst station 55畷橋 coverage 0.583 (see docs/UNCERTAINTY.md)
+EXP-003,split_conformal_90pi,DO_FEATURES,cross_river_naka,dissolved_oxygen,,1.665,,,,0.849,5.957,,pooled 5 stations; out-of-range station 46八条橋 coverage 0.479
+
 
