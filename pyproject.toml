@@ -55,6 +55,9 @@ api = [
     "python-multipart>=0.0.9",
 ]
 dashboard = ["streamlit>=1.36"]
+# Phase 5 (docs/ML_ROADMAP.md): MLP/LSTM. CPU-only is sufficient - the
+# canonical dataset is 138 rows, not a scale that benefits from a GPU.
+deep = ["torch>=2.2"]
 # Windows only: drives HEC-RAS through its COM automation server.
 hecras = ["pywin32>=306; sys_platform == 'win32'"]
 dev = [

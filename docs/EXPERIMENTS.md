@@ -226,3 +226,56 @@ of those can be assessed without coordinates first.
 coordinates), confirmed against the real station list rather than assumed.
 No remote-sensing feature, and no ablation result, is reported for this
 phase, and none should be inferred from this entry.
+
+---
+
+## EXP-005 — Phase 5: does an MLP outperform classical ML for dissolved oxygen?
+
+**Question:** Does a small feed-forward neural network beat the canonical
+Ridge model, or any other classical baseline, at predicting dissolved oxygen?
+
+**Hypothesis:** No - consistent with `ML_METHODOLOGY.md`'s existing finding
+that XGBoost already overfits at n=138, an MLP (more parameters, no
+inductive bias toward linearity) should do no better, and plausibly worse.
+
+**Dataset:** `data/processed/ayase_do_dataset.csv` (138 rows, 4 stations),
+same as every other point-prediction result in this project.
+
+**Features:** `DO_FEATURES`, unchanged.
+
+**Model:** `aquanexus.ml.deep.MLPModel` - 2 hidden layers (16, 8 units),
+dropout 0.2, Adam, early stopping (patience 20, max 300 epochs), 321
+parameters.
+
+**Validation:** Leave-one-station-out (`ModelValidator`'s protocol), with an
+additional random 20% validation slice carved from each fold's three
+training stations purely for early stopping, never touching the held-out
+station.
+
+**Results:** `scripts/phase5_deep_learning_experiment.py`:
+
+| Model | RMSE | MAE | R² |
+|---|---|---|---|
+| Ridge | 1.785 | 1.274 | 0.394 |
+| Persistence | 1.818 | 1.213 | 0.385 |
+| Random Forest | 1.884 | 1.425 | 0.325 |
+| XGBoost | 1.909 | 1.408 | 0.307 |
+| Mean (floor) | 2.294 | 1.779 | 0.000 |
+| **MLP** | **2.358** | **1.904** | **-0.057** |
+
+**Interpretation:** The hypothesis held, more strongly than expected: the
+MLP does not merely lose to Ridge, it loses to predicting the training mean
+(R² below zero). At this sample size, a 321-parameter network has more
+capacity than the ~90-120 training rows per fold can constrain, and
+regularisation (dropout, weight decay, early stopping) narrows but does not
+close that gap.
+
+**Limitations:** A single architecture was evaluated, not a hyperparameter
+search (searching against this same n=138 set would leak). The LSTM half of
+this phase was not run against real data - see EXP-001; it is implemented
+and tested against synthetic sequences only.
+
+**Conclusion:** Deep learning does not outperform classical ML for this
+dataset. The canonical dissolved-oxygen model remains Ridge, unchanged by
+this phase. Added model complexity did not produce a scientifically
+meaningful improvement here - the opposite happened, and is reported as such.

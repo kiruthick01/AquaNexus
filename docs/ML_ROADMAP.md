@@ -182,7 +182,7 @@ blocker is now measured, not assumed: **0/9 stations have a coordinate on record
 See `docs/REMOTE_SENSING.md`, `docs/DATA_LIMITATIONS.md`, and `docs/EXPERIMENTS.md`
 EXP-004. No satellite feature or ablation result is reported.
 
-### Phase 5 — Deep learning (MLP / LSTM): **PARTIALLY BLOCKED**
+### Phase 5 — Deep learning (MLP / LSTM): **IMPLEMENTED (MLP evaluated; LSTM blocked)**
 
 MLP baseline is technically runnable on 138 rows but should be expected to *lose* to
 Ridge, consistent with the existing finding that XGBoost already overfits at this
@@ -190,6 +190,16 @@ sample size (`ML_METHODOLOGY.md` Phase 2a/2c: linear beats both tree models). Fr
 an MLP result as competitive without that caveat would misrepresent the dataset. LSTM
 requires the same chronological density Phase 1 lacks — blocked for the identical
 reason, not independently.
+
+**Status update (post-implementation):** implemented in `src/aquanexus/ml/deep.py`
+(new `deep` optional extra, PyTorch), tested in `tests/test_deep.py`. The prediction
+held, more strongly than expected: run under the canonical leave-one-station-out
+protocol (`scripts/phase5_deep_learning_experiment.py`), the MLP (321 parameters)
+scores RMSE 2.358 / R² -0.057 — worse than every classical baseline **and** worse
+than the constant-mean floor (R² 0.000). Ridge remains the canonical point-prediction
+model, unchanged. LSTM is implemented and tested against synthetic sequences only,
+never run on real data, per Phase 1's blocker. Full results in `docs/DEEP_LEARNING.md`
+and `docs/EXPERIMENTS.md` EXP-005.
 
 ### Phase 6 — Transfer learning / domain adaptation: **VIABLE, infrastructure already exists**
 
@@ -234,7 +244,7 @@ src/aquanexus/
   ml/
     forecasting.py   # Phase 1: lag/rolling/lead helpers, walk-forward splitter — DONE (infra only, result blocked)
     uncertainty.py   # Phase 2: bootstrap + quantile interval models — DONE; Phase 3 conformal wrapper extends this file
-    deep/            # Phase 5: MLP, LSTM (PyTorch, new optional extra)
+    deep.py          # Phase 5: MLP, LSTM (PyTorch, new optional extra) — DONE (MLP evaluated, loses to baseline; LSTM blocked with Phase 1)
     transfer/        # Phase 6: fine-tune / frozen-extractor strategies over existing holdout
     bayesian/        # Phase 7: Bayesian linear + hierarchical regression
     graph/           # Phase 8: left as interface stubs only, per §4 blocker
@@ -291,4 +301,6 @@ Phase 3 (conformal prediction) have been implemented with real, viable results �
 the status updates in §4 and `docs/EXPERIMENTS.md` EXP-002/EXP-003. Phase 4 (remote
 sensing) has been implemented as infrastructure with a blocked result (0/9 real
 stations have a coordinate) — see the status update in §4 and `docs/EXPERIMENTS.md`
-EXP-004. Phase 5 onward has not started.
+EXP-004. Phase 5 (deep learning) has been implemented and evaluated — the MLP
+underperforms every classical baseline including the mean floor — see the status
+update in §4 and `docs/EXPERIMENTS.md` EXP-005. Phase 6 onward has not started.
