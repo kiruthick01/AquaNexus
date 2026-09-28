@@ -134,13 +134,17 @@ for this phase. Implemented as a single flat module (`ml/forecasting.py`), not t
 (`splits.py`, `evaluator.py`, etc.), and a one-file module matches that convention more
 closely than a new subpackage would.
 
-### Phase 2 — Predictive uncertainty (bootstrap/ensemble, quantile regression): **VIABLE**
+### Phase 2 — Predictive uncertainty (bootstrap/ensemble, quantile regression): **IMPLEMENTED**
 
-n=138 is workable for bootstrap resampling around the existing Ridge/RF pipeline.
-Expect wide, unstable intervals given the sample size — that instability is itself a
-finding to report, not a defect to hide. Coverage/calibration should be evaluated on
-the same grouped (station-held-out) protocol already in `ml/validator.py`, so results
-are comparable to the existing R²/RMSE table.
+Implemented in `src/aquanexus/ml/uncertainty.py` (`BootstrapIntervalModel`,
+`QuantileIntervalModel`, both behind a shared `IntervalModel` interface), tested in
+`tests/test_uncertainty.py`, and run against the real dataset via
+`scripts/phase2_uncertainty_experiment.py`. Confirmed, not merely predicted: bootstrap
+achieves near-nominal 90% coverage (0.920 pooled) but wide intervals (mean 6.74 mg/L);
+quantile regression is sharper (3.41 mg/L) but undercovers badly (0.703 pooled, as low
+as 0.521 at one station) and should not be treated as calibrated at this sample size.
+Full results and per-station breakdown in `docs/UNCERTAINTY.md` and
+`docs/EXPERIMENTS.md` EXP-002.
 
 ### Phase 3 — Conformal prediction: **VIABLE, with a tight-calibration-set caveat**
 
@@ -216,7 +220,7 @@ Following the existing `config → hecras/data → ml → api → dashboard` dep
 src/aquanexus/
   ml/
     forecasting.py   # Phase 1: lag/rolling/lead helpers, walk-forward splitter — DONE (infra only, result blocked)
-    uncertainty/     # Phase 2+3: bootstrap interval, quantile models, conformal wrapper
+    uncertainty.py   # Phase 2: bootstrap + quantile interval models — DONE; Phase 3 conformal wrapper extends this file
     deep/            # Phase 5: MLP, LSTM (PyTorch, new optional extra)
     transfer/        # Phase 6: fine-tune / frozen-extractor strategies over existing holdout
     bayesian/        # Phase 7: Bayesian linear + hierarchical regression
@@ -269,4 +273,6 @@ as documented-blocked infrastructure rather than results):
 
 No code was changed in this audit (§1–§7 above are Phase 0 as originally written).
 Phase 1 has since been implemented as infrastructure with a blocked result — see the
-status update in §4 and `docs/EXPERIMENTS.md` EXP-001. Phase 2 onward has not started.
+status update in §4 and `docs/EXPERIMENTS.md` EXP-001. Phase 2 (uncertainty) has been
+implemented with real, viable results — see the status update in §4 and
+`docs/EXPERIMENTS.md` EXP-002. Phase 3 onward has not started.

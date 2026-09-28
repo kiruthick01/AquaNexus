@@ -67,3 +67,59 @@ synthetic series (`tests/test_forecasting.py`) and is ready to use without
 further engineering if a denser, regularly-sampled record becomes available.
 No forecasting result is reported, and none should be inferred from this
 entry.
+
+---
+
+## EXP-002 — Phase 2: prediction intervals for dissolved oxygen
+
+**Question:** Can a prediction interval around the dissolved-oxygen point
+forecast be produced, and does its stated coverage hold under the canonical
+station-held-out protocol?
+
+**Hypothesis:** A bootstrap interval (model uncertainty + injected residual
+noise) should achieve closer-to-nominal coverage than a directly-fit quantile
+regression at this sample size, at the cost of width, because quantile
+regression's 5th/95th percentile fits are themselves high-variance estimates
+with only ~100 training rows.
+
+**Dataset:** `data/processed/ayase_do_dataset.csv` (138 rows, 4 stations),
+same as EXP-001.
+
+**Features:** `aquanexus.data.dataset.DO_FEATURES` (unchanged from the
+canonical Ridge baseline).
+
+**Model:** `aquanexus.ml.uncertainty.BootstrapIntervalModel` (Ridge, 500
+resamples) and `QuantileIntervalModel` (linear pinball-loss regression at
+q=0.05/0.5/0.95), targeting a 90% prediction interval.
+
+**Validation:** Leave-one-station-out, matching `ModelValidator`; the
+bootstrap method's residual pool is itself computed by a nested
+leave-one-station-out inside each fold's three training stations, so the
+held-out station never enters residual estimation for its own fold.
+
+**Results:** `scripts/phase2_uncertainty_experiment.py`, pooled over all 4
+stations:
+
+| Method | Coverage (target 0.90) | Mean width | RMSE | R² |
+|---|---|---|---|---|
+| Bootstrap | 0.920 | 6.738 mg/L | 1.794 | 0.389 |
+| Quantile regression | 0.703 | 3.411 mg/L | 1.632 | 0.494 |
+
+Full per-station breakdown in `docs/UNCERTAINTY.md`.
+
+**Interpretation:** The hypothesis held. Bootstrap achieves near-nominal
+coverage but a wide interval (6.74 mg/L against an observed range of roughly
+3-17 mg/L). Quantile regression is sharper (half the width) but
+substantially undercovers (0.703 against a 0.90 target, as low as 0.521 at
+one station) - an overconfident interval that should not be trusted at this
+sample size without further correction.
+
+**Limitations:** Station-level coverage is estimated from as few as 18 test
+points, so per-station numbers carry wide uncertainty of their own. Neither
+method has been checked under cross-river domain shift yet (Phase 3).
+
+**Conclusion:** A calibrated prediction interval is achievable on this
+dataset (bootstrap), but it is wide; a sharper interval (quantile regression)
+is not currently trustworthy at this sample size. Report the bootstrap
+interval when a calibrated claim is required, and do not present the
+quantile-regression interval as calibrated without further work.

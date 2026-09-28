@@ -2,3 +2,6 @@ experiment_id,model,feature_set,split_type,target,horizon,MAE,RMSE,R2,bias,cover
 EXP-001,none,dissolved_oxygen_lag1d,walk_forward,dissolved_oxygen,t+1,,,,,,,,blocked_by_data_availability: 0/138 usable rows (lag-complete and lead-target within tolerance)
 EXP-001,none,dissolved_oxygen_lag3d,walk_forward,dissolved_oxygen,t+3,,,,,,,,blocked_by_data_availability: 0/138 usable rows (lag-complete and lead-target within tolerance)
 EXP-001,none,dissolved_oxygen_lag7d,walk_forward,dissolved_oxygen,t+7,,,,,,,,blocked_by_data_availability: 0/138 usable rows (lag-complete and lead-target within tolerance)
+EXP-002,bootstrap_ridge_90pi,DO_FEATURES,station_held_out,dissolved_oxygen,,1.283,1.794,0.389,,0.920,6.738,,pooled over 4 stations; 500 bootstrap resamples; nested-OOF residuals
+EXP-002,quantile_regression_90pi,DO_FEATURES,station_held_out,dissolved_oxygen,,1.152,1.632,0.494,,0.703,3.411,,pooled over 4 stations; undercovers target 0.90; not trustworthy at this n
+
