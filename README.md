@@ -15,7 +15,7 @@ evidence (R² **+0.336**, against +0.394 at home) and collapses where it does no
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776ab?logo=python&logoColor=white">
   <img alt="HEC-RAS 7.0" src="https://img.shields.io/badge/HEC--RAS-7.0-1f6feb">
   <img alt="React 19 + TypeScript" src="https://img.shields.io/badge/React%2019-TypeScript-61dafb?logo=react&logoColor=white">
-  <img alt="tests" src="https://img.shields.io/badge/tests-388%20backend%20%2B%2033%20frontend-2ea043">
+  <img alt="tests" src="https://img.shields.io/badge/tests-485%20backend%20%2B%2033%20frontend-2ea043">
   <img alt="ruff" src="https://img.shields.io/badge/lint-ruff%20clean-2ea043">
   <img alt="licence" src="https://img.shields.io/badge/licence-MIT-6e7781">
   <img alt="data" src="https://img.shields.io/badge/data-CC%20BY%204.0%20%E5%9F%BC%E7%8E%89%E7%9C%8C-e67e22">
@@ -288,6 +288,44 @@ the **Transfer** page — the split, not the pooled figure, leads in both.
 
 ---
 
+## Eight ML capabilities, tested
+
+Past the two baseline models, this project systematically tested eight
+further capabilities — forecasting, uncertainty, conformal prediction,
+satellite features, deep learning, transfer learning, Bayesian modeling,
+graph neural networks — against the same standard every other number here is
+held to: run on the real data, under the real validation protocol, and
+reported whether or not the result is flattering.
+
+**Three are blocked by data the project does not have**, confirmed with a
+number rather than assumed: forecasting (0/138 rows are dense enough to build
+a lag feature from), satellite features (0/9 monitoring stations have a
+recorded coordinate), and graph neural networks (0/2 rivers have a recorded
+upstream/downstream edge list). Each has tested infrastructure sitting behind
+the blocker, ready the moment real data arrives.
+
+**Five ran to a real result, and complexity mostly lost.** An MLP scores R²
+**−0.057** — worse than predicting the mean. Two Bayesian models are
+calibrated but wide, and underperform Ridge on accuracy because a generic
+weakly-informative prior regularizes less than Ridge's tuned penalty.
+Conformal prediction's pooled coverage looks stable under cross-river domain
+shift (0.870 → 0.849) — until the per-station table shows one station
+covering at **0.479**, the same station a zero-shot transfer already fails
+on. The one
+consistent finding across all eight: **how strongly a method is regularized
+relative to how little data it has, not how sophisticated it is**, decides
+whether it helps or actively hurts — a naively fine-tuned transfer model
+scored R² **−6.548**, the worst result in the entire project, while the same
+technique with a shrinkage strength matched to its 29-row adaptation slice
+scored the *best* result, **+0.372**.
+
+Full roadmap, every experiment's question/hypothesis/result/conclusion, and
+the consolidated answers: [`docs/ML_ROADMAP.md`](docs/ML_ROADMAP.md),
+[`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md),
+[`docs/EXPERIMENT_RESULTS.md`](docs/EXPERIMENT_RESULTS.md).
+
+---
+
 ## Explainability
 
 SHAP with model-type dispatch — `TreeExplainer` for ensembles, `KernelExplainer` for
@@ -438,9 +476,11 @@ cd AquaNexus
 
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[ml,api,dev]"                      # add ",geo" for point clouds
+                                                     # add ",deep" or ",bayesian" for
+                                                     # Phase 5/8 or Phase 7 experiments
 cp .env.example .env
 
-pytest                                              # 388 tests
+pytest                                              # 485 tests
 ```
 
 Rebuild the whole thing:
@@ -485,7 +525,14 @@ src/aquanexus/
 │   ├── trainer.py     benchmarking
 │   ├── evaluator.py   metrics incl. skill against an explicit floor
 │   ├── explainer.py   SHAP, interactions, thresholds, collinearity
-│   └── validator.py   baselines: hydraulic-only, linear, persistence
+│   ├── validator.py   baselines: hydraulic-only, linear, persistence
+│   ├── forecasting.py lag/lead/rolling + walk-forward — blocked, real data too sparse
+│   ├── uncertainty.py bootstrap, quantile, split-conformal prediction intervals
+│   ├── deep.py        MLP (evaluated) + LSTM (blocked with forecasting)
+│   ├── transfer.py    domain alignment, fine-tuning, frozen-head adaptation
+│   ├── bayesian.py    pooled + hierarchical Bayesian regression (PyMC)
+│   └── graph.py       dense GCN/GAT — blocked, no station network topology
+├── remote_sensing.py  NDVI/NDWI/MNDWI, cloud mask, buffers — blocked, no station coords
 └── api/               FastAPI service
 ```
 
@@ -523,6 +570,17 @@ Stated here rather than discovered later:
 | [`docs/BIOLOGICAL_DATA.md`](docs/BIOLOGICAL_DATA.md) | The measured biology that exists for this river, and what it can and cannot settle |
 | [`docs/CONSTRICTION_IMPACT.md`](docs/CONSTRICTION_IMPACT.md) | Why four cross-sections were removed |
 | [`docs/HOLDOUT_RIVER.md`](docs/HOLDOUT_RIVER.md) | The Naka: what happens on a river the model has never seen |
+| [`docs/ML_ROADMAP.md`](docs/ML_ROADMAP.md) | Eight further ML capabilities: what's viable, what's blocked, and why |
+| [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) | Every experiment beyond the baseline: question, hypothesis, result, conclusion |
+| [`docs/EXPERIMENT_RESULTS.md`](docs/EXPERIMENT_RESULTS.md) | Consolidated results table and the project's closing questions, answered |
+| [`docs/DATA_LIMITATIONS.md`](docs/DATA_LIMITATIONS.md) | Exactly what data is missing for each blocked capability, and what would unblock it |
+| [`docs/VALIDATION.md`](docs/VALIDATION.md) | The four validation protocols this project uses, and when each applies |
+| [`docs/UNCERTAINTY.md`](docs/UNCERTAINTY.md) | Bootstrap, quantile, and conformal prediction intervals — terminology and results |
+| [`docs/REMOTE_SENSING.md`](docs/REMOTE_SENSING.md) | Satellite feature pipeline — implemented, blocked on station coordinates |
+| [`docs/DEEP_LEARNING.md`](docs/DEEP_LEARNING.md) | MLP vs. classical ML — and why the MLP lost |
+| [`docs/TRANSFER_LEARNING.md`](docs/TRANSFER_LEARNING.md) | Domain alignment, fine-tuning, frozen-head adaptation on the Naka |
+| [`docs/BAYESIAN_MODELING.md`](docs/BAYESIAN_MODELING.md) | Pooled and hierarchical Bayesian regression, and why they lose to Ridge |
+| [`docs/GNN.md`](docs/GNN.md) | Graph neural network infrastructure — blocked on station network topology |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Running it, and the conventions a change follows |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Running it, container notes, and what is still unverified |
 | [`notebooks/`](notebooks/) | Point-cloud→hydraulics walkthrough, data exploration, training, SHAP, validation |
