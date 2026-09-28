@@ -1,0 +1,4 @@
+experiment_id,model,feature_set,split_type,target,horizon,MAE,RMSE,R2,bias,coverage,interval_width,runtime,notes
+EXP-001,none,dissolved_oxygen_lag1d,walk_forward,dissolved_oxygen,t+1,,,,,,,,blocked_by_data_availability: 0/138 usable rows (lag-complete and lead-target within tolerance)
+EXP-001,none,dissolved_oxygen_lag3d,walk_forward,dissolved_oxygen,t+3,,,,,,,,blocked_by_data_availability: 0/138 usable rows (lag-complete and lead-target within tolerance)
+EXP-001,none,dissolved_oxygen_lag7d,walk_forward,dissolved_oxygen,t+7,,,,,,,,blocked_by_data_availability: 0/138 usable rows (lag-complete and lead-target within tolerance)
