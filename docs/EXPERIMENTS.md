@@ -185,3 +185,44 @@ a real, specific failure at exactly the subgroup already known to be outside
 the model's training range. A pooled coverage number is not sufficient to
 certify a conformal interval as trustworthy under distribution shift; the
 per-subgroup breakdown is required, and was not optional in this case.
+
+---
+
+## EXP-004 — Phase 4: can remote-sensing features be extracted for any real station?
+
+**Question:** Can NDVI/NDWI/MNDWI or other Sentinel-2/Landsat-derived
+features be computed for the Ayase or Naka monitoring stations?
+
+**Hypothesis:** None can be computed, because no station coordinate is on
+record anywhere in this repository - this is a data-prerequisite check, not
+a hypothesis about remote sensing itself.
+
+**Dataset:** Real station name lists from the Ayase (4 stations) and Naka
+(5 stations) canonical datasets.
+
+**Features:** N/A - no imagery was fetched.
+
+**Model:** N/A.
+
+**Validation:** `aquanexus.remote_sensing.require_station_coordinates`, run
+against the real combined 9-station list via
+`scripts/phase4_remote_sensing_feasibility.py`.
+
+**Results:** 9/9 stations raise `MissingStationCoordinatesError`. Zero
+stations have a usable coordinate.
+
+**Interpretation:** The hypothesis held completely. The feature-extraction
+machinery itself (spectral indices, cloud filtering, spatial buffers,
+temporal matching) is implemented and tested against synthetic rasters
+(`tests/test_remote_sensing.py`), but cannot be exercised on any real
+AquaNexus station until a citable coordinate source is integrated - see
+`docs/REMOTE_SENSING.md` and `docs/DATA_LIMITATIONS.md`.
+
+**Limitations:** This experiment tests only the coordinate prerequisite, not
+satellite data availability, cloud cover, or feature predictive value - none
+of those can be assessed without coordinates first.
+
+**Conclusion:** Phase 4 is **blocked by data availability** (station
+coordinates), confirmed against the real station list rather than assumed.
+No remote-sensing feature, and no ablation result, is reported for this
+phase, and none should be inferred from this entry.

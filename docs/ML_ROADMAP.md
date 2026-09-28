@@ -159,7 +159,7 @@ known to sit outside the model's training range (46八条橋 on the Naka, covera
 0.479) and at the Ayase's own hardest station (55畷橋, coverage 0.583). Full results
 in `docs/UNCERTAINTY.md` and `docs/EXPERIMENTS.md` EXP-003.
 
-### Phase 4 — Satellite / remote sensing: **BLOCKED by missing station coordinates**
+### Phase 4 — Satellite / remote sensing: **IMPLEMENTED (infrastructure); BLOCKED (coordinates)**
 
 The observation dates (2022–2025) are well within Sentinel-2 (2015–) and Landsat
 coverage, so temporal compatibility is not the blocker. The blocker is that **no
@@ -171,6 +171,16 @@ fetched, the station coordinates must be sourced from a citable public record (e
 the Saitama monitoring program's own station registry) — not estimated from station
 names — and that provenance documented. This is a data-acquisition prerequisite, not
 an implementation task, and should not be worked around by guessing coordinates.
+
+**Status update (post-implementation):** feature-extraction infrastructure was built
+in `src/aquanexus/remote_sensing.py` — NDVI/NDWI/MNDWI, Sentinel-2 SCL cloud
+filtering, NumPy-based circular buffer statistics (no `rasterio` needed for the
+geometry), and tolerance-based temporal matching — tested against synthetic rasters
+(`tests/test_remote_sensing.py`, 14 tests). Run against the real combined 9-station
+list (4 Ayase + 5 Naka) via `scripts/phase4_remote_sensing_feasibility.py`, the
+blocker is now measured, not assumed: **0/9 stations have a coordinate on record.**
+See `docs/REMOTE_SENSING.md`, `docs/DATA_LIMITATIONS.md`, and `docs/EXPERIMENTS.md`
+EXP-004. No satellite feature or ablation result is reported.
 
 ### Phase 5 — Deep learning (MLP / LSTM): **PARTIALLY BLOCKED**
 
@@ -228,10 +238,10 @@ src/aquanexus/
     transfer/        # Phase 6: fine-tune / frozen-extractor strategies over existing holdout
     bayesian/        # Phase 7: Bayesian linear + hierarchical regression
     graph/           # Phase 8: left as interface stubs only, per §4 blocker
-  remote_sensing/     # Phase 4: feature-extraction interfaces; blocked pending station geocoding
+  remote_sensing.py  # Phase 4: NDVI/NDWI/MNDWI, cloud mask, buffers, temporal match — DONE (infra only, blocked pending station geocoding)
 ```
 
-`uncertainty/` is built as a reusable interface (point prediction → interval) from
+`ml/uncertainty.py` is built as a reusable interface (point prediction → interval) from
 Phase 2 onward, so Phase 3 (conformal) and Phase 7 (Bayesian credible intervals) can
 implement the same interface and be compared like-for-like, per the original request.
 
@@ -278,5 +288,7 @@ No code was changed in this audit (§1–§7 above are Phase 0 as originally wri
 Phase 1 has since been implemented as infrastructure with a blocked result — see the
 status update in §4 and `docs/EXPERIMENTS.md` EXP-001. Phase 2 (uncertainty) and
 Phase 3 (conformal prediction) have been implemented with real, viable results — see
-the status updates in §4 and `docs/EXPERIMENTS.md` EXP-002/EXP-003. Phase 4 onward
-has not started.
+the status updates in §4 and `docs/EXPERIMENTS.md` EXP-002/EXP-003. Phase 4 (remote
+sensing) has been implemented as infrastructure with a blocked result (0/9 real
+stations have a coordinate) — see the status update in §4 and `docs/EXPERIMENTS.md`
+EXP-004. Phase 5 onward has not started.

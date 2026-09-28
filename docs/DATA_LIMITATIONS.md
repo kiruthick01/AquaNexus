@@ -66,6 +66,14 @@ for the water-quality monitoring stations — only Japanese station names
 `ARCHITECTURE.md` fixes `EPSG:6677` for point-cloud geometry, but neither
 attaches a coordinate to a monitoring station.
 
+**What was measured:** running `aquanexus.remote_sensing.
+require_station_coordinates` (`scripts/phase4_remote_sensing_feasibility.py`)
+against the real station lists from both rivers: **9/9 stations** (4 Ayase +
+5 Naka) have no coordinate on record. See `docs/REMOTE_SENSING.md` for the
+implemented-but-blocked feature-extraction infrastructure (spectral indices,
+cloud filtering, spatial buffers, temporal matching - all tested against
+synthetic data).
+
 **What would unblock it:** the actual station coordinates, sourced from a
 citable public record (e.g. the Saitama prefecture monitoring program's own
 station registry) and documented with their provenance. Estimating coordinates

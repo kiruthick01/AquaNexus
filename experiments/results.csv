@@ -7,5 +7,7 @@ EXP-002,quantile_regression_90pi,DO_FEATURES,station_held_out,dissolved_oxygen,,
 EXP-003,split_conformal_90pi,DO_FEATURES,random_in_domain,dissolved_oxygen,,0.888,,,,0.857,4.720,,n_test=28; single split; near target, within plausible sampling noise
 EXP-003,split_conformal_90pi,DO_FEATURES,station_held_out,dissolved_oxygen,,1.314,,,,0.870,6.145,,pooled 4 stations; worst station 55畷橋 coverage 0.583 (see docs/UNCERTAINTY.md)
 EXP-003,split_conformal_90pi,DO_FEATURES,cross_river_naka,dissolved_oxygen,,1.665,,,,0.849,5.957,,pooled 5 stations; out-of-range station 46八条橋 coverage 0.479
+EXP-004,none,remote_sensing,none,dissolved_oxygen,,,,,,,,,blocked_by_data_availability: 0/9 real stations (Ayase+Naka) have a recorded coordinate
+
 
 
