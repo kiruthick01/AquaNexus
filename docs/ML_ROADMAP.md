@@ -226,13 +226,24 @@ how strongly the target-domain adaptation is regularised relative to the tiny (2
 adaptation slice, not which named technique is used. Full analysis in
 `docs/TRANSFER_LEARNING.md` and `docs/EXPERIMENTS.md` EXP-006.
 
-### Phase 7 — Bayesian modeling: **VIABLE**
+### Phase 7 — Bayesian modeling: **IMPLEMENTED**
 
 n=138 with 4 station groups is a reasonable, small case for Bayesian linear
 regression and a hierarchical (partial-pooling-by-station) variant — arguably a
 better fit for 4 groups than a classical fixed-effect model. No Bayesian library is
 currently a dependency (`pymc`/`numpyro`/`stan` all absent from `pyproject.toml`);
 one will need to be added and justified as a new optional extra.
+
+**Status update (post-implementation):** implemented in `src/aquanexus/ml/bayesian.py`
+(new `bayesian` optional extra, PyMC/NUTS), tested in `tests/test_bayesian.py`. Both
+models achieve coverage at or above the 0.90 target (pooled 0.913, hierarchical
+0.971) but underperform Ridge on point accuracy (RMSE 2.612/2.741 vs 1.785) - traced
+to the generic `Normal(0,5)` prior regularizing less aggressively than Ridge's
+cross-validated penalty, not a convergence failure (in-sample fit matches Ridge
+almost exactly, `r_hat`=1.00 throughout). A non-centered reparameterization was
+applied to the hierarchical model to remove sampler divergences encountered during
+development - a numerical fix, not a prior change. Full analysis in
+`docs/BAYESIAN_MODELING.md` and `docs/EXPERIMENTS.md` EXP-007.
 
 ### Phase 8 — Graph Neural Network: **BLOCKED by network size and missing topology**
 
@@ -260,7 +271,7 @@ src/aquanexus/
     uncertainty.py   # Phase 2: bootstrap + quantile interval models — DONE; Phase 3 conformal wrapper extends this file
     deep.py          # Phase 5: MLP, LSTM (PyTorch, new optional extra) — DONE (MLP evaluated, loses to baseline; LSTM blocked with Phase 1)
     transfer.py      # Phase 6: domain alignment, fine-tuning, frozen-extractor+head — DONE
-    bayesian/        # Phase 7: Bayesian linear + hierarchical regression
+    bayesian.py      # Phase 7: Bayesian linear + hierarchical regression — DONE
     graph/           # Phase 8: left as interface stubs only, per §4 blocker
   remote_sensing.py  # Phase 4: NDVI/NDWI/MNDWI, cloud mask, buffers, temporal match — DONE (infra only, blocked pending station geocoding)
 ```
@@ -320,4 +331,6 @@ underperforms every classical baseline including the mean floor — see the stat
 update in §4 and `docs/EXPERIMENTS.md` EXP-005. Phase 6 (transfer learning) has been implemented and evaluated — domain
 alignment and frozen-head adaptation helped, naive fine-tuning catastrophically
 failed at low shrinkage — see the status update in §4 and `docs/EXPERIMENTS.md`
-EXP-006. Phase 7 onward has not started.
+EXP-006. Phase 7 (Bayesian modeling) has been implemented and evaluated — calibrated
+but wide, underperforming Ridge on point accuracy for an understood reason — see the
+status update in §4 and `docs/EXPERIMENTS.md` EXP-007. Phase 8 has not started.

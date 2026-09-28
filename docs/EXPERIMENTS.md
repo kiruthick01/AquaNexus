@@ -341,3 +341,61 @@ not by which named technique is used. Under-regularised fine-tuning was the
 worst outcome measured, worse than zero-shot; adequately-regularised
 fine-tuning was the best. See `docs/TRANSFER_LEARNING.md` for the full
 sweep and analysis.
+
+---
+
+## EXP-007 — Phase 7: does Bayesian modeling provide useful calibrated uncertainty?
+
+**Question:** Do a Bayesian linear regression and a hierarchical
+(partial-pooling-by-station) variant provide calibrated posterior predictive
+intervals, and how do they compare to the bootstrap/quantile intervals
+already measured (Phase 2) on point accuracy?
+
+**Hypothesis:** Both should achieve close-to-nominal coverage, since their
+priors are weakly informative rather than tight. Point accuracy was not
+assumed to match Ridge in advance.
+
+**Dataset:** `data/processed/ayase_do_dataset.csv`, same as every other
+point-prediction result.
+
+**Features:** `DO_FEATURES`, unchanged.
+
+**Model:** `aquanexus.ml.bayesian.BayesianLinearModel` (pooled) and
+`BayesianHierarchicalModel` (station intercepts partially pooled, shared
+slopes), NUTS via PyMC, 1000 draws/1000 tune/4 chains per fold.
+
+**Validation:** Leave-one-station-out (`ModelValidator`'s protocol); the
+hierarchical model draws a fresh intercept from the population hyperprior for
+each held-out station, never reusing an observed station's fitted value.
+
+**Results:** `scripts/phase7_bayesian_experiment.py`:
+
+| Method | Coverage | Mean width | RMSE | R² |
+|---|---|---|---|---|
+| Bayesian linear (pooled) | 0.913 | 7.475 | 2.612 | -0.297 |
+| Bayesian hierarchical | 0.971 | 9.299 | 2.741 | -0.428 |
+| Bootstrap (Phase 2) | 0.920 | 6.738 | 1.794 | 0.389 |
+| Quantile regression (Phase 2) | 0.703 | 3.411 | 1.632 | 0.494 |
+
+**Interpretation:** The coverage half of the hypothesis held (both Bayesian
+methods near or above the 0.90 target). Point accuracy did not match Ridge:
+investigated directly (not left unexplained), the Bayesian pooled model's
+in-sample fit matches Ridge's almost exactly (RMSE 1.328 vs 1.330,
+`r_hat`=1.00 throughout), but its posterior mean coefficients are
+substantially larger than Ridge's tuned ones - the generic `Normal(0,5)`
+prior regularizes less aggressively than Ridge's cross-validated `alpha=1.0`
+penalty at n=138 with collinear features, costing it more on held-out data.
+The hierarchical model was more conservative still (wider intervals, slightly
+worse RMSE), consistent with 4 stations being a small number of groups to
+partially pool over.
+
+**Limitations:** A single generic prior family was used, not one informed by
+feature-specific domain knowledge. `docs/BAYESIAN_MODELING.md` documents a
+sampling fix (non-centered parameterization) applied to the hierarchical
+model to remove divergences encountered during development - a numerical
+correction, not a prior change.
+
+**Conclusion:** Bayesian modeling gives calibrated but wide intervals and
+does not out-predict Ridge here, for an understood and reported reason
+(prior regularization strength, not a modeling error). The bootstrap
+interval around Ridge remains the project's best uncertainty method to date.

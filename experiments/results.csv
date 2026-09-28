@@ -18,4 +18,6 @@ EXP-006,fine_tuned_ridge_shrinkage100,DO_FEATURES,cross_river_naka_subset,dissol
 EXP-006,fine_tuned_ridge_shrinkage1000,DO_FEATURES,cross_river_naka_subset,dissolved_oxygen,,1.100,1.544,0.372,-0.091,,,,best result of any Phase 6 method tested
 EXP-006,fine_tuned_ridge_shrinkage10000,DO_FEATURES,cross_river_naka_subset,dissolved_oxygen,,1.282,1.674,0.263,0.497,,,,slightly over-shrunk toward source, pulling back toward zero-shot
 EXP-006,frozen_head_mlp,DO_FEATURES,cross_river_naka_subset,dissolved_oxygen,,1.158,1.573,0.349,0.433,,,,essentially matches best fine-tuned result; see docs/TRANSFER_LEARNING.md
+EXP-007,bayesian_linear_pooled,DO_FEATURES,station_held_out,dissolved_oxygen,,1.936,2.612,-0.297,,0.913,7.475,,weaker regularisation than Ridge's tuned alpha; see docs/BAYESIAN_MODELING.md
+EXP-007,bayesian_hierarchical,DO_FEATURES,station_held_out,dissolved_oxygen,,1.848,2.741,-0.428,,0.971,9.299,,partial pooling over only 4 stations; non-centered reparam used, see docs/BAYESIAN_MODELING.md
 
