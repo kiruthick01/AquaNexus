@@ -245,7 +245,7 @@ applied to the hierarchical model to remove sampler divergences encountered duri
 development - a numerical fix, not a prior change. Full analysis in
 `docs/BAYESIAN_MODELING.md` and `docs/EXPERIMENTS.md` EXP-007.
 
-### Phase 8 — Graph Neural Network: **BLOCKED by network size and missing topology**
+### Phase 8 — Graph Neural Network: **IMPLEMENTED (infrastructure); BLOCKED (result)**
 
 Only 4 real Ayase stations (5 for Naka) exist as potential graph nodes. A GCN/GAT
 over a single-digit-node graph, with no encoded upstream/downstream edge structure
@@ -255,6 +255,17 @@ passing result — any number reported would be an artifact of a toy graph, not
 evidence about river network structure. Unblocking needs both more monitored nodes
 and an actual hydrological edge list (which station drains into which), neither of
 which currently exists in this repo.
+
+**Status update (post-implementation):** dense-graph GCN and GAT layers plus
+node-regression wrappers implemented in `src/aquanexus/ml/graph.py` (hand-rolled in
+plain PyTorch, no `torch_geometric` dependency needed at this scale), tested against
+a synthetic 6-node graph (`tests/test_graph.py`, 12 tests). Run against the real
+station lists via `scripts/phase8_gnn_feasibility.py`, both blockers are now
+confirmed with numbers rather than assumed: **0/2 rivers have a recorded
+hydrological edge list**, and the HEC-RAS sweep's `river_station` field (49 distinct
+values for Ayase, 35 for Naka) is confirmed unjoined to any monitoring station's
+identity. No GNN was trained on real data; no graph-vs-non-graph comparison is
+reported. Full detail in `docs/GNN.md` and `docs/EXPERIMENTS.md` EXP-008.
 
 ---
 
@@ -272,7 +283,7 @@ src/aquanexus/
     deep.py          # Phase 5: MLP, LSTM (PyTorch, new optional extra) — DONE (MLP evaluated, loses to baseline; LSTM blocked with Phase 1)
     transfer.py      # Phase 6: domain alignment, fine-tuning, frozen-extractor+head — DONE
     bayesian.py      # Phase 7: Bayesian linear + hierarchical regression — DONE
-    graph/           # Phase 8: left as interface stubs only, per §4 blocker
+    graph.py         # Phase 8: dense GCN/GAT layers — DONE (infra only, blocked pending topology, per §4)
   remote_sensing.py  # Phase 4: NDVI/NDWI/MNDWI, cloud mask, buffers, temporal match — DONE (infra only, blocked pending station geocoding)
 ```
 
@@ -333,4 +344,12 @@ alignment and frozen-head adaptation helped, naive fine-tuning catastrophically
 failed at low shrinkage — see the status update in §4 and `docs/EXPERIMENTS.md`
 EXP-006. Phase 7 (Bayesian modeling) has been implemented and evaluated — calibrated
 but wide, underperforming Ridge on point accuracy for an understood reason — see the
-status update in §4 and `docs/EXPERIMENTS.md` EXP-007. Phase 8 has not started.
+status update in §4 and `docs/EXPERIMENTS.md` EXP-007. Phase 8 (GNN) has been implemented as infrastructure with a blocked result
+(0/2 rivers have a recorded edge list) — see the status update in §4 and
+`docs/EXPERIMENTS.md` EXP-008.
+
+All eight phases requested in this roadmap have now been addressed: five with real,
+viable results (Phases 2, 3, 5, 6, 7), three blocked by data availability with
+tested, documented infrastructure ready to use once the blocker clears (Phases 1, 4,
+8). See `docs/EXPERIMENT_RESULTS.md` for the consolidated summary and answers to the
+project's closing questions.

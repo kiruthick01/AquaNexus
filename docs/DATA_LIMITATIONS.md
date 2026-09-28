@@ -91,6 +91,15 @@ is encoded anywhere — `river_station` in the HEC-RAS data orders cross-section
 *within one reach* for hydraulic interpolation, which is a different graph
 than the monitoring network.
 
+**What was measured:** running `aquanexus.ml.graph.require_station_topology`
+(`scripts/phase8_gnn_feasibility.py`) against the real station lists from
+both rivers: 0 rivers have a recorded edge list. The sweep's `river_station`
+field was checked directly, not assumed unusable — it carries 49 distinct
+values for the Ayase and 35 for the Naka, but none is joined to a monitoring
+station's identity anywhere in `aquanexus.data.dataset`, confirming it is a
+different graph (cross-sections within a reach) than the one this phase
+needs (the monitoring network). See `docs/GNN.md`.
+
 **What would unblock it:** both (a) enough monitored nodes for message passing
 to be meaningful (single digits is not), and (b) an actual hydrological edge
 list — which station's reach drains into which — from a source other than

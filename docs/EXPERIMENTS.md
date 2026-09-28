@@ -399,3 +399,49 @@ correction, not a prior change.
 does not out-predict Ridge here, for an understood and reported reason
 (prior regularization strength, not a modeling error). The bootstrap
 interval around Ridge remains the project's best uncertainty method to date.
+
+---
+
+## EXP-008 — Phase 8: can a GNN be trained on the real monitoring-station network?
+
+**Question:** Can a GCN or GAT be trained on the Ayase or Naka monitoring
+station network, and would explicit graph structure improve on a non-graph
+model?
+
+**Hypothesis:** No GNN can be trained on either real network - Phase 0's
+audit found only 4-5 candidate nodes and no upstream/downstream edge list.
+This experiment tests that prerequisite directly rather than assuming it.
+
+**Dataset:** Real station name lists from the Ayase (4 stations) and Naka (5
+stations) canonical datasets, plus the HEC-RAS sweep's `river_station` field
+for both, checked as a candidate (and rejected) topology source.
+
+**Features:** N/A - no graph was trained.
+
+**Model:** N/A.
+
+**Validation:** `aquanexus.ml.graph.require_station_topology`, run against
+both real station lists via `scripts/phase8_gnn_feasibility.py`; the
+`river_station` field's distinct-value count (49 Ayase, 35 Naka) checked and
+confirmed unjoined to any monitoring station identity.
+
+**Results:** 0/2 rivers have a recorded hydrological edge list. `river_station`
+orders cross-sections within a reach, not monitoring stations across a
+network - confirmed directly, not assumed.
+
+**Interpretation:** The hypothesis held completely. The GNN machinery itself
+(dense GCN and GAT layers, node-regression wrappers with correct held-out-node
+semantics) is implemented and tested against a synthetic 6-node graph
+(`tests/test_graph.py`), but cannot be exercised on either real AquaNexus
+network until both blockers - node count and topology - are resolved. See
+`docs/GNN.md` and `docs/DATA_LIMITATIONS.md`.
+
+**Limitations:** This experiment tests only the topology and node-count
+prerequisites, not whether a real GNN would outperform a non-graph model -
+that comparison is meaningless without a real graph to run it on.
+
+**Conclusion:** Phase 8 is **blocked by network size and missing topology**,
+confirmed against the real station lists and the one topology-adjacent field
+this repository does carry, rather than assumed. No GNN result, and no
+graph-vs-non-graph comparison, is reported for this phase, and none should
+be inferred from this entry.
