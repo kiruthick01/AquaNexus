@@ -127,3 +127,33 @@ def test_set_seed_makes_torch_reproducible():
     set_seed(123)
     b = torch.rand(5)
     assert torch.equal(a, b)
+
+
+# ---------------------------------------------------------------------------
+# Serialization
+# ---------------------------------------------------------------------------
+
+
+def test_mlp_save_load_round_trip(linear_data, tmp_path):
+    X, y = linear_data
+    model = MLPModel(hidden_sizes=(8, 4), max_epochs=30, seed=0).fit(X, y)
+    before = model.predict(X)
+
+    path = model.save(tmp_path / "mlp.joblib")
+    restored = MLPModel.load(path)
+    after = restored.predict(X)
+
+    np.testing.assert_allclose(before, after)
+    assert restored.n_parameters() == model.n_parameters()
+
+
+def test_lstm_save_load_round_trip(sequence_data, tmp_path):
+    X, y = sequence_data
+    model = LSTMModel(input_size=2, hidden_size=8, max_epochs=20, seed=0).fit(X, y)
+    before = model.predict(X)
+
+    path = model.save(tmp_path / "lstm.joblib")
+    restored = LSTMModel.load(path)
+    after = restored.predict(X)
+
+    np.testing.assert_allclose(before, after)

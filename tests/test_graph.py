@@ -154,3 +154,32 @@ def test_require_station_topology_succeeds_once_populated(monkeypatch):
     monkeypatch.setitem(STATION_EDGES, "test-river", [("A", "B")])
     edges = require_station_topology(["A", "B"], river="test-river")
     assert edges == [("A", "B")]
+
+
+# ---------------------------------------------------------------------------
+# Serialization
+# ---------------------------------------------------------------------------
+
+
+def test_gcn_save_load_round_trip(chain_graph, tmp_path):
+    graph, target, train_mask = chain_graph
+    model = GCNModel(hidden_size=8, max_epochs=50, seed=0).fit(graph, target, train_mask)
+    before = model.predict()
+
+    path = model.save(tmp_path / "gcn.joblib")
+    restored = GCNModel.load(path)
+    after = restored.predict()
+
+    np.testing.assert_allclose(before, after)
+
+
+def test_gat_save_load_round_trip(chain_graph, tmp_path):
+    graph, target, train_mask = chain_graph
+    model = GATModel(hidden_size=8, max_epochs=50, seed=0).fit(graph, target, train_mask)
+    before = model.predict()
+
+    path = model.save(tmp_path / "gat.joblib")
+    restored = GATModel.load(path)
+    after = restored.predict()
+
+    np.testing.assert_allclose(before, after)

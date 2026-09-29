@@ -195,6 +195,15 @@ class BootstrapIntervalModel:
         upper = np.quantile(composite, 1.0 - alpha / 2.0, axis=0)
         return IntervalPrediction(point=point, lower=lower, upper=upper, level=level)
 
+    def save(self, path):
+        from aquanexus.ml.serialization import save_model
+        return save_model(self, path)
+
+    @classmethod
+    def load(cls, path) -> BootstrapIntervalModel:
+        from aquanexus.ml.serialization import load_model
+        return load_model(cls, path)
+
 
 class QuantileIntervalModel:
     """Prediction interval from directly-fit conditional quantile regressions.
@@ -266,6 +275,15 @@ class QuantileIntervalModel:
                        "quantile crossing, a known small-sample failure mode",
                        inverted, len(X))
         return IntervalPrediction(point=point, lower=lower, upper=upper, level=level)
+
+    def save(self, path):
+        from aquanexus.ml.serialization import save_model
+        return save_model(self, path)
+
+    @classmethod
+    def load(cls, path) -> QuantileIntervalModel:
+        from aquanexus.ml.serialization import load_model
+        return load_model(cls, path)
 
 
 class SplitConformalModel:
@@ -367,6 +385,15 @@ class SplitConformalModel:
         point = self._point_model.predict(X)
         return IntervalPrediction(point=point, lower=point - radius,
                                   upper=point + radius, level=level)
+
+    def save(self, path):
+        from aquanexus.ml.serialization import save_model
+        return save_model(self, path)
+
+    @classmethod
+    def load(cls, path) -> SplitConformalModel:
+        from aquanexus.ml.serialization import load_model
+        return load_model(cls, path)
 
 
 # ---------------------------------------------------------------------------

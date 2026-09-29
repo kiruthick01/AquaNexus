@@ -226,3 +226,12 @@ class FrozenHeadAdapter:
             features = self._body(torch.from_numpy(X_norm))
             predictions = self._head(features).numpy().reshape(-1)
         return predictions
+
+    def save(self, path):
+        from aquanexus.ml.serialization import save_model
+        return save_model(self, path)
+
+    @classmethod
+    def load(cls, path) -> FrozenHeadAdapter:
+        from aquanexus.ml.serialization import load_model
+        return load_model(cls, path)

@@ -161,3 +161,27 @@ def test_frozen_head_adapter_head_weights_do_change():
         X_adapt, y_adapt
     )
     assert adapter.curve.train_loss[-1] < adapter.curve.train_loss[0]
+
+
+def test_frozen_head_adapter_save_load_round_trip(tmp_path):
+    from aquanexus.ml.deep import MLPModel
+    from aquanexus.ml.transfer import FrozenHeadAdapter
+
+    rng = np.random.default_rng(8)
+    n = 80
+    X = pd.DataFrame({"x1": rng.uniform(0, 10, n)})
+    y = 2.0 * X["x1"] + rng.normal(0, 0.2, n)
+    source_mlp = MLPModel(hidden_sizes=(4,), max_epochs=50, patience=10, seed=0).fit(X, y)
+
+    X_adapt = pd.DataFrame({"x1": rng.uniform(0, 10, 20)})
+    y_adapt = -3.0 * X_adapt["x1"] + 50.0
+    adapter = FrozenHeadAdapter(source_mlp, max_epochs=50, patience=20, seed=0).fit(
+        X_adapt, y_adapt
+    )
+    before = adapter.predict(X_adapt)
+
+    path = adapter.save(tmp_path / "frozen_head.joblib")
+    restored = FrozenHeadAdapter.load(path)
+    after = restored.predict(X_adapt)
+
+    np.testing.assert_allclose(before, after)

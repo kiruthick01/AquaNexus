@@ -48,6 +48,28 @@ def _require_torch():
     return torch
 
 
+try:
+    import torch.nn as _nn
+except ImportError:  # pragma: no cover - exercised only without the extra
+    _nn = None
+
+if _nn is not None:
+    class _LSTMNet(_nn.Module):
+        """A named, module-level class - not one nested inside a method -
+        because `pickle` (and so `joblib`, `LSTMModel.save`) can only
+        serialize a class it can re-import by qualified name; a class
+        defined inside a function has no such name."""
+
+        def __init__(self, input_size, hidden_size, num_layers):
+            super().__init__()
+            self.lstm = _nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+            self.head = _nn.Linear(hidden_size, 1)
+
+        def forward(self, x):
+            out, _ = self.lstm(x)
+            return self.head(out[:, -1, :])
+
+
 def set_seed(seed: int) -> None:
     """Seed every RNG torch touches, so two fits with the same seed produce
     bit-identical weights, not merely similar ones."""
@@ -211,6 +233,15 @@ class MLPModel:
             pred = np.clip(pred, low, high)
         return pred
 
+    def save(self, path):
+        from aquanexus.ml.serialization import save_model
+        return save_model(self, path)
+
+    @classmethod
+    def load(cls, path) -> MLPModel:
+        from aquanexus.ml.serialization import load_model
+        return load_model(cls, path)
+
 
 class LSTMModel:
     """Minimal single-layer LSTM sequence regressor - infrastructure only.
@@ -239,19 +270,7 @@ class LSTMModel:
 
     def _build(self):
         _require_torch()
-        from torch import nn
-
-        class _Net(nn.Module):
-            def __init__(self, input_size, hidden_size, num_layers):
-                super().__init__()
-                self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-                self.head = nn.Linear(hidden_size, 1)
-
-            def forward(self, x):
-                out, _ = self.lstm(x)
-                return self.head(out[:, -1, :])
-
-        return _Net(self.input_size, self.hidden_size, self.num_layers)
+        return _LSTMNet(self.input_size, self.hidden_size, self.num_layers)
 
     def fit(self, X_seq: np.ndarray, y, X_val_seq: np.ndarray | None = None,
            y_val=None) -> LSTMModel:
@@ -316,3 +335,12 @@ class LSTMModel:
                 torch.from_numpy(np.asarray(X_seq, dtype=np.float32))
             ).numpy().reshape(-1)
         return pred
+
+    def save(self, path):
+        from aquanexus.ml.serialization import save_model
+        return save_model(self, path)
+
+    @classmethod
+    def load(cls, path) -> LSTMModel:
+        from aquanexus.ml.serialization import load_model
+        return load_model(cls, path)

@@ -187,3 +187,58 @@ def test_mean_width_matches_manual_average():
         level=0.9,
     )
     assert mean_width(interval) == pytest.approx((2.0 + 3.0) / 2)
+
+
+# ---------------------------------------------------------------------------
+# Serialization
+# ---------------------------------------------------------------------------
+
+
+def test_bootstrap_model_save_load_round_trip(linear_data, tmp_path):
+    X, y, groups = linear_data
+    model = BootstrapIntervalModel(n_bootstrap=10, seed=0).fit(X, y, groups=groups)
+    before = model.predict_interval(X, level=0.9)
+
+    path = model.save(tmp_path / "bootstrap.joblib")
+    restored = BootstrapIntervalModel.load(path)
+    after = restored.predict_interval(X, level=0.9)
+
+    np.testing.assert_allclose(before.point, after.point)
+    np.testing.assert_allclose(before.lower, after.lower)
+    np.testing.assert_allclose(before.upper, after.upper)
+
+
+def test_bootstrap_load_rejects_wrong_type(linear_data, tmp_path):
+    X, y, _ = linear_data
+    model = QuantileIntervalModel(level=0.9).fit(X, y)
+    path = model.save(tmp_path / "quantile.joblib")
+    with pytest.raises(TypeError):
+        BootstrapIntervalModel.load(path)
+
+
+def test_quantile_model_save_load_round_trip(linear_data, tmp_path):
+    X, y, _ = linear_data
+    model = QuantileIntervalModel(level=0.9).fit(X, y)
+    before = model.predict_interval(X, level=0.9)
+
+    path = model.save(tmp_path / "quantile.joblib")
+    restored = QuantileIntervalModel.load(path)
+    after = restored.predict_interval(X, level=0.9)
+
+    np.testing.assert_allclose(before.point, after.point)
+    np.testing.assert_allclose(before.lower, after.lower)
+    np.testing.assert_allclose(before.upper, after.upper)
+
+
+def test_conformal_model_save_load_round_trip(linear_data, tmp_path):
+    X, y, _ = linear_data
+    model = SplitConformalModel(calibration_fraction=0.3, seed=0).fit(X, y)
+    before = model.predict_interval(X, level=0.9)
+
+    path = model.save(tmp_path / "conformal.joblib")
+    restored = SplitConformalModel.load(path)
+    after = restored.predict_interval(X, level=0.9)
+
+    np.testing.assert_allclose(before.point, after.point)
+    np.testing.assert_allclose(before.lower, after.lower)
+    np.testing.assert_allclose(before.upper, after.upper)

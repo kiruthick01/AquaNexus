@@ -241,6 +241,15 @@ class _DenseGraphModel:
         return sum(p.numel() for p in list(self.layer1.parameters()) +
                   list(self.layer2.parameters()))
 
+    def save(self, path):
+        from aquanexus.ml.serialization import save_model
+        return save_model(self, path)
+
+    @classmethod
+    def load(cls, path):
+        from aquanexus.ml.serialization import load_model
+        return load_model(cls, path)
+
 
 class GCNModel(_DenseGraphModel):
     """Two-layer GCN for node regression - infrastructure only, see module docstring."""

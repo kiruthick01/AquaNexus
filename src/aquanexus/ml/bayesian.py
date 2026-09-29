@@ -51,6 +51,7 @@ implementation avoids deliberately.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -141,9 +142,27 @@ class BayesianLinearModel:
             self.trace = pm.sample(self.draws, tune=self.tune, chains=self.chains,
                                    random_seed=self.seed, progressbar=False)
         self.model = model
+
+        # Plain-array copies of the samples predict_interval actually needs,
+        # extracted once here rather than re-read from self.trace on every
+        # call. This also decouples prediction from the trace object, which
+        # is what makes save()/load() possible without pickling a fitted
+        # pymc.Model - see the module-level note in save().
+        self._alpha_samples = self.trace.posterior["alpha"].to_numpy().reshape(-1)
+        self._beta_samples = self.trace.posterior["beta"].to_numpy().reshape(-1, n_features)
+        self._sigma_samples = self.trace.posterior["sigma"].to_numpy().reshape(-1)
         return self
 
     def posterior_summary(self, level: float = 0.9) -> PosteriorSummary:
+        """Credible intervals for each parameter. Requires the live trace -
+        unavailable after :meth:`load`, since that trace is not what gets
+        persisted (see :meth:`save`)."""
+        if self.trace is None:
+            raise RuntimeError(
+                "posterior_summary needs the live sampling trace, which is not "
+                "restored by load() - only the posterior-predictive samples "
+                "needed for predict_interval are persisted"
+            )
         import arviz as az
 
         summary = az.summary(self.trace, ci_prob=level, ci_kind="hdi",
@@ -151,17 +170,13 @@ class BayesianLinearModel:
         return PosteriorSummary(table=summary, level=level)
 
     def predict_interval(self, X: pd.DataFrame, level: float = 0.9) -> IntervalPrediction:
-        if self.trace is None:
+        if getattr(self, "_alpha_samples", None) is None:
             raise RuntimeError("model is not fitted")
 
         X_std = _standardize_apply(X, self._feature_names, self._median, self._mean, self._std)
-        alpha_samples = self.trace.posterior["alpha"].to_numpy().reshape(-1)
-        beta_samples = self.trace.posterior["beta"].to_numpy().reshape(-1, len(self._feature_names))
-        sigma_samples = self.trace.posterior["sigma"].to_numpy().reshape(-1)
-
-        mu = alpha_samples[:, None] + beta_samples @ X_std.T  # (n_draws, n_rows)
+        mu = self._alpha_samples[:, None] + self._beta_samples @ X_std.T  # (n_draws, n_rows)
         rng = np.random.default_rng(self.seed)
-        noise = rng.normal(0.0, 1.0, size=mu.shape) * sigma_samples[:, None]
+        noise = rng.normal(0.0, 1.0, size=mu.shape) * self._sigma_samples[:, None]
         posterior_predictive = mu + noise
 
         point = posterior_predictive.mean(axis=0)
@@ -175,6 +190,52 @@ class BayesianLinearModel:
             lower = np.clip(lower, low, high)
             upper = np.clip(upper, low, high)
         return IntervalPrediction(point=point, lower=lower, upper=upper, level=level)
+
+    def save(self, path):
+        """Persist only what :meth:`predict_interval` needs: standardisation
+        statistics and posterior-predictive sample arrays, all plain NumPy.
+
+        Deliberately excludes ``self.trace`` (an `arviz.InferenceData`) and
+        ``self.model`` (a `pymc.Model` holding compiled PyTensor graphs) -
+        neither is reliably picklable across environments, and neither is
+        needed for prediction. ``posterior_summary()`` is unavailable after
+        :meth:`load` as a direct consequence; it is a diagnostic method, not
+        part of the predictive interface this project compares across
+        uncertainty methods.
+        """
+        import joblib
+
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        state = {
+            "feature_names": self._feature_names,
+            "median": self._median, "mean": self._mean, "std": self._std,
+            "alpha_samples": self._alpha_samples,
+            "beta_samples": self._beta_samples,
+            "sigma_samples": self._sigma_samples,
+            "output_range": self.output_range,
+            "seed": self.seed,
+        }
+        joblib.dump(state, path)
+        return path
+
+    @classmethod
+    def load(cls, path) -> BayesianLinearModel:
+        import joblib
+
+        state = joblib.load(Path(path))
+        obj = cls.__new__(cls)
+        obj.draws = obj.tune = obj.chains = None
+        obj.seed = state["seed"]
+        obj.output_range = state["output_range"]
+        obj.trace = None
+        obj.model = None
+        obj._feature_names = state["feature_names"]
+        obj._median, obj._mean, obj._std = state["median"], state["mean"], state["std"]
+        obj._alpha_samples = state["alpha_samples"]
+        obj._beta_samples = state["beta_samples"]
+        obj._sigma_samples = state["sigma_samples"]
+        return obj
 
 
 class BayesianHierarchicalModel:
@@ -240,6 +301,16 @@ class BayesianHierarchicalModel:
             self.trace = pm.sample(self.draws, tune=self.tune, chains=self.chains,
                                    random_seed=self.seed, progressbar=False)
         self.model = model
+
+        # See BayesianLinearModel.fit's matching comment: plain-array copies
+        # of exactly what predict_interval needs, decoupled from the trace
+        # object so save()/load() never has to pickle a fitted pymc.Model.
+        self._beta_samples = self.trace.posterior["beta"].to_numpy().reshape(-1, n_features)
+        self._sigma_samples = self.trace.posterior["sigma"].to_numpy().reshape(-1)
+        self._alpha_station_samples = (self.trace.posterior["alpha_station"]
+                                       .to_numpy().reshape(-1, n_stations))
+        self._mu_alpha_samples = self.trace.posterior["mu_alpha"].to_numpy().reshape(-1)
+        self._sigma_alpha_samples = self.trace.posterior["sigma_alpha"].to_numpy().reshape(-1)
         return self
 
     def predict_interval(self, X: pd.DataFrame, level: float = 0.9,
@@ -254,26 +325,21 @@ class BayesianHierarchicalModel:
         (``mu_alpha``, ``sigma_alpha``) once per posterior sample - not
         copied from any observed station.
         """
-        if self.trace is None:
+        if getattr(self, "_beta_samples", None) is None:
             raise RuntimeError("model is not fitted")
 
         X_std = _standardize_apply(X, self._feature_names, self._median, self._mean, self._std)
-        beta_samples = self.trace.posterior["beta"].to_numpy().reshape(-1, len(self._feature_names))
-        sigma_samples = self.trace.posterior["sigma"].to_numpy().reshape(-1)
-        n_draws = beta_samples.shape[0]
+        n_draws = self._beta_samples.shape[0]
         rng = np.random.default_rng(self.seed)
 
         if station is not None and station in self._station_names:
             station_idx = int(np.where(self._station_names == station)[0][0])
-            alpha_samples = (self.trace.posterior["alpha_station"]
-                            .to_numpy()[:, :, station_idx].reshape(-1))
+            alpha_samples = self._alpha_station_samples[:, station_idx]
         else:
-            mu_alpha_samples = self.trace.posterior["mu_alpha"].to_numpy().reshape(-1)
-            sigma_alpha_samples = self.trace.posterior["sigma_alpha"].to_numpy().reshape(-1)
-            alpha_samples = rng.normal(mu_alpha_samples, sigma_alpha_samples)
+            alpha_samples = rng.normal(self._mu_alpha_samples, self._sigma_alpha_samples)
 
-        mu = alpha_samples[:, None] + beta_samples @ X_std.T
-        noise = rng.normal(0.0, 1.0, size=(n_draws, X_std.shape[0])) * sigma_samples[:, None]
+        mu = alpha_samples[:, None] + self._beta_samples @ X_std.T
+        noise = rng.normal(0.0, 1.0, size=(n_draws, X_std.shape[0])) * self._sigma_samples[:, None]
         posterior_predictive = mu + noise
 
         point = posterior_predictive.mean(axis=0)
@@ -287,3 +353,47 @@ class BayesianHierarchicalModel:
             lower = np.clip(lower, low, high)
             upper = np.clip(upper, low, high)
         return IntervalPrediction(point=point, lower=lower, upper=upper, level=level)
+
+    def save(self, path):
+        """Persist only what :meth:`predict_interval` needs - see
+        `BayesianLinearModel.save`'s docstring for why ``self.trace`` and
+        ``self.model`` are excluded."""
+        import joblib
+
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        state = {
+            "feature_names": self._feature_names,
+            "median": self._median, "mean": self._mean, "std": self._std,
+            "station_names": self._station_names,
+            "beta_samples": self._beta_samples,
+            "sigma_samples": self._sigma_samples,
+            "alpha_station_samples": self._alpha_station_samples,
+            "mu_alpha_samples": self._mu_alpha_samples,
+            "sigma_alpha_samples": self._sigma_alpha_samples,
+            "output_range": self.output_range,
+            "seed": self.seed,
+        }
+        joblib.dump(state, path)
+        return path
+
+    @classmethod
+    def load(cls, path) -> BayesianHierarchicalModel:
+        import joblib
+
+        state = joblib.load(Path(path))
+        obj = cls.__new__(cls)
+        obj.draws = obj.tune = obj.chains = None
+        obj.seed = state["seed"]
+        obj.output_range = state["output_range"]
+        obj.trace = None
+        obj.model = None
+        obj._feature_names = state["feature_names"]
+        obj._median, obj._mean, obj._std = state["median"], state["mean"], state["std"]
+        obj._station_names = state["station_names"]
+        obj._beta_samples = state["beta_samples"]
+        obj._sigma_samples = state["sigma_samples"]
+        obj._alpha_station_samples = state["alpha_station_samples"]
+        obj._mu_alpha_samples = state["mu_alpha_samples"]
+        obj._sigma_alpha_samples = state["sigma_alpha_samples"]
+        return obj

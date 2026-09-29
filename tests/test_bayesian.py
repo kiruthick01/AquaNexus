@@ -134,3 +134,47 @@ def test_hierarchical_raises_before_fit(grouped_data):
     X, _, _ = grouped_data
     with pytest.raises(RuntimeError):
         BayesianHierarchicalModel().predict_interval(X)
+
+
+# ---------------------------------------------------------------------------
+# Serialization
+# ---------------------------------------------------------------------------
+
+
+def test_linear_save_load_round_trip(linear_data, tmp_path):
+    X, y = linear_data
+    model = BayesianLinearModel(**SMALL).fit(X, y)
+    before = model.predict_interval(X, level=0.9)
+
+    path = model.save(tmp_path / "bayesian_linear.joblib")
+    restored = BayesianLinearModel.load(path)
+    after = restored.predict_interval(X, level=0.9)
+
+    np.testing.assert_allclose(before.point, after.point)
+    np.testing.assert_allclose(before.lower, after.lower)
+    np.testing.assert_allclose(before.upper, after.upper)
+
+
+def test_linear_posterior_summary_unavailable_after_load(linear_data, tmp_path):
+    X, y = linear_data
+    model = BayesianLinearModel(**SMALL).fit(X, y)
+    path = model.save(tmp_path / "bayesian_linear.joblib")
+    restored = BayesianLinearModel.load(path)
+    with pytest.raises(RuntimeError, match="trace"):
+        restored.posterior_summary()
+
+
+def test_hierarchical_save_load_round_trip(grouped_data, tmp_path):
+    X, y, groups = grouped_data
+    model = BayesianHierarchicalModel(**SMALL).fit(X, y, groups)
+    x_new = pd.DataFrame({"x1": [5.0, 6.0]})
+    before_seen = model.predict_interval(x_new, level=0.9, station="A")
+    before_unseen = model.predict_interval(x_new, level=0.9, station="Z")
+
+    path = model.save(tmp_path / "bayesian_hierarchical.joblib")
+    restored = BayesianHierarchicalModel.load(path)
+    after_seen = restored.predict_interval(x_new, level=0.9, station="A")
+    after_unseen = restored.predict_interval(x_new, level=0.9, station="Z")
+
+    np.testing.assert_allclose(before_seen.point, after_seen.point)
+    np.testing.assert_allclose(before_unseen.point, after_unseen.point)
