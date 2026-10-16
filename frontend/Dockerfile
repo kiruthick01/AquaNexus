@@ -12,7 +12,7 @@
 # tests/test_deployment.py for what is verified without a daemon, and DEVLOG.md
 # for what remains unverified.
 
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 
 WORKDIR /app
 
