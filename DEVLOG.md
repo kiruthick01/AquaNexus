@@ -380,6 +380,42 @@ take for that to stop being true.
 **Verified**: 404 backend tests, 46 frontend, `ruff` and `oxlint` clean, the
 permalink round trip exercised in a real Chrome against a live API.
 
+### 2026-10-16 — rebuilding around a nationwide dataset (step 0 gate passed)
+
+The honest verdict on the project so far was that its real signal rested on 138
+dissolved-oxygen labels from two rivers, so nothing built on top of them could be
+more than a careful small-data study. The rebuild replaces the training data with
+the Ministry of the Environment's nationwide 公共用水域 sample files (plan:
+`C:\Users\kirut\.claude\plans\scalable-knitting-quiche.md`), predicting
+dissolved oxygen from real labels only.
+
+**Gate result.** Sample (`mk`, 検体値) and station (`mm`, 水質測定点) CSVs for
+FY2013–FY2022, nationwide, river, 生活環境項目, downloaded through the site's own
+form and sorted by `scripts/unpack_moe.py` (the site names every zip randomly, so
+files are identified by content). After `aquanexus.data.moe.build_dataset`:
+**565,674 DO samples, 5,883 stations, all 47 prefectures**, 100% with coordinates.
+The gate asked for about 50k rows; this is eleven times that.
+
+**Things the files do not say on their face**
+- In `mk`, `NENDO` is the fiscal year and `FISCALYEAR` is the *calendar year of
+  the sample*. A March 2023 sample in FY2022 has `FISCALYEAR=2023`. Reading it the
+  other way ran the date range to 2024.
+- `DAYTIME` is an unpadded `ddhhmm` integer (`30930` is the 3rd at 09:30).
+- `DO_3` is an exceedance flag derived from the environmental standard, i.e. from
+  the label itself. Rows flagged 1 average 5.6 mg/L and top out at 7.4. It is kept
+  as `below_standard` and must never be a model input.
+- `DO_` is the published string (`<0.5` when below detection) and `DO_2` zeroes
+  those, so censored readings are parsed from `DO_` and halved, as in
+  `data/loader.py`.
+
+**Known gaps.** No water temperature and no flow in the file, and only 2.2% of
+samples are below 5 mg/L, so the fish-stress tail is thin and will be reported
+separately rather than averaged away. Temperature and rainfall have to come from
+weather data joined by date and coordinate.
+
+**Download note.** Chrome blocked automatic multi-file downloads from the site
+after the fifth file; allowing them for the site cleared it.
+
 ### Next session — pick up here
 
 **State (2026-09-14, latest commit on `main`):** All four phases done, the open items worked down, the held-out river run *and served*, both containers run in CI rather than only building, scenarios shareable as links, and the biological data audited. 404 backend tests + 46 frontend, lint clean, CI green, working tree clean, all pushed. Models are on corrected geometry (49 sections): R² 0.394, RMSE 1.785. The Naka holdout says the model transfers inside its training ranges (+0.336) and not outside them (−0.903), and `GET /holdout` plus the dashboard's Transfer page say so to anyone who never opens the docs.
