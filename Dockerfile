@@ -1,6 +1,6 @@
 # Backend image. HEC-RAS itself is Windows-only and is NOT installed here —
 # simulations are run on the host and their outputs mounted into data/hecras.
-FROM python:3.12-slim AS base
+FROM python:3.14-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
