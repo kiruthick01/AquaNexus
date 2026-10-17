@@ -19,6 +19,13 @@ log = get_logger("api.registry")
 STATIONS_FILE = "stations.parquet"
 STATION_FIELDS = ["latitude", "longitude", "elevation", "relief_10km", "rel_elevation"]
 HISTORY_FIELDS = ["prev_do", "prev_do_gap_days", "station_do_mean", "station_do_n"]
+#: Features that carry an actual oxygen reading from somewhere else. Counts and
+#: distances do not: they are available for any location without monitoring data.
+SIGNAL_FEATURES = {
+    c
+    for c in feat.NEIGHBOR_PRIOR + feat.NEIGHBOR_NOW + feat.NEAR + feat.RIVER + feat.HISTORY
+    if c.endswith(("do_prior", "do_now")) or c in {"prev_do", "station_do_mean"}
+}
 
 #: What each served model needs from the caller, for display next to the model.
 MODE_SUMMARY = {
@@ -145,6 +152,25 @@ class ModelRegistry:
             if c in frame and not pd.isna(frame.iloc[0][c]) and not lo <= frame.iloc[0][c] <= hi
         ]
         return BuiltInput(frame, missing, out, notes)
+
+    def missing_signal(self, bundle: DOBundle, built: BuiltInput) -> str | None:
+        """Why a richer model cannot answer, or None if it has what it needs.
+
+        ``nowcast`` and ``full`` learn from other readings of oxygen. If none of those
+        arrive, the model falls back on how stations without neighbours look in the
+        training data, which is a confident answer to a question nobody asked.
+        """
+        wanted = [c for c in bundle.features if c in SIGNAL_FEATURES]
+        if not wanted:
+            return None
+        present = [c for c in wanted if c not in built.missing]
+        if present:
+            return None
+        return (
+            "this model needs earlier or neighbouring oxygen readings and none were supplied "
+            f"(any of: {', '.join(wanted[:6])}, ...); give a station_id with a date after its last "
+            "record, supply them, or use the 'geo' model"
+        )
 
     def contributions(self, bundle: DOBundle, row: pd.DataFrame) -> dict[str, float]:
         """Exact TreeSHAP contributions in mg/L; they sum to the prediction minus ``bias``."""

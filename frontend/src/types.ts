@@ -78,6 +78,8 @@ export interface PredictionRequest {
   station_id?: number;
   location?: { latitude?: number; longitude?: number };
   weather?: Weather;
+  history?: { prev_do?: number };
+  neighbors?: { nb_do_now?: number };
   explain?: boolean;
 }
 

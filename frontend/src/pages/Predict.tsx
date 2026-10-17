@@ -28,6 +28,8 @@ export default function Predict({ models }: { models: ModelState }) {
   const [latitude, setLatitude] = useState("35.8");
   const [longitude, setLongitude] = useState("139.8");
   const [weather, setWeather] = useState<Weather>({ air_temp: 25 });
+  const [prevDo, setPrevDo] = useState("");
+  const [neighbourDo, setNeighbourDo] = useState("");
   const [result, setResult] = useState<PredictionResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +56,8 @@ export default function Predict({ models }: { models: ModelState }) {
           mode,
           explain: true,
           weather,
+          ...(prevDo !== "" && { history: { prev_do: Number(prevDo) } }),
+          ...(neighbourDo !== "" && { neighbors: { nb_do_now: Number(neighbourDo) } }),
           ...(station
             ? { station_id: station.station_id }
             : { location: { latitude: Number(latitude), longitude: Number(longitude) } }),
@@ -74,7 +78,7 @@ export default function Predict({ models }: { models: ModelState }) {
       return next;
     });
 
-  const needsHistory = mode === "full" || mode === "full_alert";
+  const needsHistory = mode !== "geo";
   const contributions = result?.contributions
     ? Object.entries(result.contributions)
         .filter(([name]) => name !== "bias")
@@ -187,10 +191,31 @@ export default function Predict({ models }: { models: ModelState }) {
             </div>
           ))}
 
+          <div className="field">
+            <label htmlFor="neighbour-do">
+              Neighbouring stations' DO within 10 days (mg/L, for nowcast and full)
+            </label>
+            <input
+              id="neighbour-do"
+              type="number"
+              value={neighbourDo}
+              onChange={(e) => setNeighbourDo(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="prev-do">This station's previous DO (mg/L, for full)</label>
+            <input
+              id="prev-do"
+              type="number"
+              value={prevDo}
+              onChange={(e) => setPrevDo(e.target.value)}
+            />
+          </div>
+
           {needsHistory && !station && (
             <p className="small muted">
-              The history models need a station: without one their history inputs are missing and
-              they fall back to roughly the weather-only accuracy.
+              The nowcast and full models need oxygen readings from somewhere: pick a station, or
+              enter the neighbouring or previous DO above. Without any, the API declines to answer.
             </p>
           )}
 

@@ -160,9 +160,17 @@ def test_history_is_used_only_after_the_last_record(client):
     assert "prev_do" not in after["missing_features"]
     before = client.post(
         "/predict", json={"date": "2022-06-01", "station_id": 1001, "mode": "full"}
-    ).json()
-    assert "prev_do" in before["missing_features"]
-    assert any("history" in n for n in before["notes"])
+    )
+    assert before.status_code == 422
+    assert "history features were left out" in before.json()["detail"]
+
+
+def test_a_model_that_needs_oxygen_readings_refuses_to_guess_without_any(client):
+    response = client.post("/predict", json=request(mode="full"))
+    assert response.status_code == 422
+    assert "earlier or neighbouring oxygen readings" in response.json()["detail"]
+    supplied = client.post("/predict", json=request(mode="full", history={"prev_do": 6.0}))
+    assert supplied.status_code == 200
 
 
 def test_contributions_sum_to_the_prediction(client):

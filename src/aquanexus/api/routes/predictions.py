@@ -40,6 +40,11 @@ def _predict(request: PredictionRequest) -> PredictionResponse:
         text = str(exc).strip("'\"")
         raise HTTPException(status_code=503 if "not loaded" in text else 404, detail=text) from exc
 
+    reason = registry.missing_signal(bundle, built)
+    if reason:
+        detail = " ".join([reason + ".", *built.notes])
+        raise HTTPException(status_code=422, detail=detail)
+
     out = bundle.predict(built.row).iloc[0]
     prediction = float(out["prediction"])
     caveats = list(CAVEATS)
