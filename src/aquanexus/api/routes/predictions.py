@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import numpy as np
 from fastapi import APIRouter, HTTPException
 
 from aquanexus.api.registry import registry
@@ -12,138 +11,67 @@ from aquanexus.api.schemas import (
     PredictionRequest,
     PredictionResponse,
 )
-from aquanexus.logger import get_logger
 
-log = get_logger("api.predictions")
 router = APIRouter(tags=["predictions"])
 
+CAVEATS = [
+    "Trained on monthly river samples; predicts DO at sampling dates, not continuously.",
+    "Intervals cover about 90% of cases overall but far fewer when DO is below 5 mg/L.",
+    "Missing inputs are treated as unknown, which lowers accuracy; see missing_features.",
+]
 
-def interpret(target: str, value: float) -> str:
-    """Plain-language reading of a prediction.
 
-    The habitat bands follow ML_STRATEGY §1; the oxygen bands follow the
-    thresholds used in the label function - below 2 mg/L is acutely lethal for
-    most freshwater fish, and below 5 is where hypoxic stress begins.
-    """
-    if target == "hsi":
-        for limit, label in ((0.2, "unsuitable"), (0.4, "poor"), (0.6, "moderate"),
-                             (0.8, "good"), (1.01, "optimal")):
-            if value < limit:
-                return f"Habitat suitability is {label} ({value:.2f})"
-        return f"Habitat suitability is optimal ({value:.2f})"
-
+def interpret(value: float) -> str:
+    """Plain-language reading of a DO value; 5 mg/L is the usual stress threshold."""
     if value < 2.0:
-        return f"{value:.2f} mg/L - acutely lethal for most freshwater fish"
+        return f"{value:.2f} mg/L - severe hypoxia, acutely lethal for most fish"
     if value < 5.0:
-        return f"{value:.2f} mg/L - hypoxic stress likely"
+        return f"{value:.2f} mg/L - below the 5 mg/L stress threshold"
     if value < 8.0:
         return f"{value:.2f} mg/L - adequate for most species"
     return f"{value:.2f} mg/L - well oxygenated"
 
 
-def _predict_one(state: dict, target: str, explain: bool) -> PredictionResponse:
+def _predict(request: PredictionRequest) -> PredictionResponse:
     try:
-        model = registry.get(target)
+        bundle = registry.get(request.mode)
+        built = registry.build_input(bundle, request.as_inputs())
     except KeyError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        text = str(exc).strip("'\"")
+        raise HTTPException(status_code=503 if "not loaded" in text else 404, detail=text) from exc
 
-    features = registry.build_features(state, model)
-    try:
-        value = float(model.predictor.predict(features)[0])
-    except Exception as exc:  # noqa: BLE001 - surface as a 422, not a 500
-        raise HTTPException(
-            status_code=422,
-            detail=f"could not predict from the supplied state: {exc}",
-        ) from exc
-
-    uncertainty = None
-    try:
-        _, spread = model.predictor.predict_with_uncertainty(features)
-        if np.isfinite(spread[0]):
-            uncertainty = float(spread[0])
-    except Exception:  # noqa: BLE001 - uncertainty is optional, never fatal
-        uncertainty = None
-
-    contributions = None
-    if explain:
-        contributions = _contributions(model, features)
-
+    out = bundle.predict(built.row).iloc[0]
+    prediction = float(out["prediction"])
+    caveats = list(CAVEATS)
+    if request.mode == "full_alert":
+        caveats.append(
+            "full_alert over-predicts low DO on purpose: expect about 3 false alarms in 4."
+        )
     return PredictionResponse(
-        target=target,
-        prediction=value,
-        unit=model.unit,
-        interpretation=interpret(target, value),
-        labels=model.labels,
-        uncertainty=uncertainty,
-        out_of_range=registry.check_ranges(state, model),
-        contributions=contributions,
-        caveats=model.caveats,
+        mode=request.mode,
+        prediction=prediction,
+        lower=float(out["lower"]),
+        upper=float(out["upper"]),
+        level=bundle.level,
+        interpretation=interpret(prediction),
+        missing_features=built.missing,
+        out_of_range=built.out_of_range,
+        contributions=registry.contributions(bundle, built.row) if request.explain else None,
+        notes=built.notes,
+        caveats=caveats,
     )
 
 
-def _contributions(model, features) -> dict[str, float] | None:
-    """Per-feature SHAP contributions, or None if they cannot be produced.
-
-    An explanation is a convenience, so a failure here must not cost the caller
-    their prediction. It is returned as None rather than as zeros when the
-    model has no saved background: SHAP measures a prediction against a
-    reference distribution, and explaining a request against itself returns
-    exactly zero for every feature - which reads as "nothing mattered".
-    """
-    if model.background is None:
-        log.warning("%s has no background sample; explanation skipped", model.name)
-        return None
-    try:
-        explainer = registry.explainer_for(model)
-        explanation = explainer.explain_prediction(features)
-        return {k: float(v) for k, v in explanation.contributions.items()}
-    except Exception as exc:  # noqa: BLE001
-        log.warning("explanation unavailable: %s", exc)
-        return None
-
-
-@router.post("/predict", response_model=PredictionResponse, summary="Predict one state")
+@router.post("/predict", response_model=PredictionResponse, summary="Predict dissolved oxygen")
 def predict(request: PredictionRequest) -> PredictionResponse:
-    """Predict a single environmental state.
+    """Predict DO (mg/L) with a 90% interval for one place and date.
 
-    The response carries the model's caveats and flags any input outside the
-    training range. Out-of-range inputs are answered rather than refused - the
-    caller is told, and decides.
+    Inputs outside the training range are answered but flagged in ``out_of_range``.
     """
-    state = request.state.model_dump(exclude_none=True)
-    if not state:
-        raise HTTPException(status_code=422, detail="state is empty")
-    return _predict_one(state, request.target, request.explain)
+    return _predict(request)
 
 
-@router.post("/batch_predict", response_model=BatchPredictionResponse,
-             summary="Predict many states")
+@router.post("/batch_predict", response_model=BatchPredictionResponse, summary="Predict many")
 def batch_predict(request: BatchPredictionRequest) -> BatchPredictionResponse:
-    """Predict a batch of states.
-
-    Rows are predicted individually so one malformed entry cannot void the batch;
-    a row that cannot be predicted returns NaN in its position.
-    """
-    try:
-        model = registry.get(request.target)
-    except KeyError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-    predictions: list[float] = []
-    out_of_range = 0
-    for state_model in request.states:
-        state = state_model.model_dump(exclude_none=True)
-        try:
-            features = registry.build_features(state, model)
-            predictions.append(float(model.predictor.predict(features)[0]))
-        except Exception as exc:  # noqa: BLE001
-            log.warning("row failed: %s", exc)
-            predictions.append(float("nan"))
-        if registry.check_ranges(state, model):
-            out_of_range += 1
-
-    return BatchPredictionResponse(
-        target=request.target, unit=model.unit, labels=model.labels,
-        n=len(predictions), predictions=predictions,
-        out_of_range_count=out_of_range, caveats=model.caveats,
-    )
+    predictions = [_predict(r) for r in request.requests]
+    return BatchPredictionResponse(n=len(predictions), predictions=predictions)

@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from aquanexus import __version__
 from aquanexus.config import Settings, settings
 from aquanexus.logger import get_logger
@@ -35,19 +33,6 @@ def test_ensure_dirs_is_idempotent(tmp_path: Path):
     s.ensure_dirs()
     s.ensure_dirs()
     assert (tmp_path / "raw").is_dir()
-
-
-@pytest.mark.parametrize("field", ["TEST_SIZE", "VAL_SIZE"])
-@pytest.mark.parametrize("bad", [0.0, 1.0, -0.1, 1.5])
-def test_split_fractions_rejected_outside_unit_interval(field, bad):
-    with pytest.raises(ValueError):
-        Settings(**{field: bad})
-
-
-def test_crs_is_jgd2011_zone_9():
-    # The Saitama point cloud ships in this CRS; changing it silently would
-    # misplace every cross-section.
-    assert settings.CRS_EPSG == 6677
 
 
 def test_logger_is_namespaced():

@@ -1,337 +1,160 @@
-"""Loads the trained models and prepares feature vectors for them.
-
-Models are loaded once at startup and held in memory. Feature construction lives
-here rather than in the route handlers, because both models need derived
-quantities the caller does not supply - DO saturation from temperature, Froude
-number from depth and velocity, cyclic month terms - and computing them in two
-places would let them drift apart.
-"""
+"""Loads the dissolved-oxygen bundles and the station table, and builds model inputs."""
 
 from __future__ import annotations
 
-import json
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from aquanexus.config import settings
+from aquanexus.data import features as feat
 from aquanexus.logger import get_logger
+from aquanexus.ml.do_bundle import DOBundle
 
 log = get_logger("api.registry")
 
-#: Caller fields that stand in for a model feature. A grab sample describes one
-#: point; the model was trained on reach means, and treating the point as the
-#: reach is the assumption `build_features` makes.
-FEATURE_ALIASES: dict[str, tuple[str, ...]] = {
-    "reach_depth": ("depth",),
-    "reach_velocity": ("velocity",),
-    "reach_froude": ("froude_number",),
+STATIONS_FILE = "stations.parquet"
+STATION_FIELDS = ["latitude", "longitude", "elevation", "relief_10km", "rel_elevation"]
+HISTORY_FIELDS = ["prev_do", "prev_do_gap_days", "station_do_mean", "station_do_n"]
+
+#: What each served model needs from the caller, for display next to the model.
+MODE_SUMMARY = {
+    "geo": "Coordinates, date and weather. Works anywhere, no monitoring needed.",
+    "nowcast": "geo plus what neighbouring stations read in the last 10 days.",
+    "full": "nowcast plus the station's own earlier readings. Most accurate.",
+    "full_alert": "full, tuned to catch low-oxygen events (more false alarms).",
 }
 
 
 @dataclass
-class LoadedModel:
-    """A model plus the metadata needed to answer honestly about it."""
-
-    name: str
-    predictor: object
-    unit: str
-    labels: str
-    model_type: str
-    n_train: int
-    features: list[str]
-    metrics: dict = field(default_factory=dict)
-    caveats: list[str] = field(default_factory=list)
-    training_ranges: dict[str, tuple[float, float]] = field(default_factory=dict)
-    #: Feature pairs correlated above 0.9 in training, disclosed with every
-    #: explanation. Empty for a manifest written before this was recorded.
-    collinear_pairs: list[list[str]] = field(default_factory=list)
-    #: Observed [min, max] of the label, for showing a reading in context.
-    target_range: list[float] = field(default_factory=list)
-    #: Sample of the training rows, used as the SHAP reference distribution.
-    #: Without it an explanation compares a request against itself and every
-    #: contribution comes back as zero, so its absence disables /explain rather
-    #: than producing an empty-looking answer.
-    background: pd.DataFrame | None = None
-    #: Built on first use and kept: fitting a KernelExplainer means summarising
-    #: the background, which costs more than the explanation itself and does not
-    #: depend on the request.
-    explainer: object | None = field(default=None, repr=False)
+class BuiltInput:
+    row: pd.DataFrame
+    missing: list[str]
+    out_of_range: list[dict]
+    notes: list[str]
 
 
 class ModelRegistry:
-    """Holds the loaded models and builds their inputs."""
+    """Holds the loaded bundles and the station table."""
 
     def __init__(self) -> None:
-        self.models: dict[str, LoadedModel] = {}
-        self.manifest: dict = {}
+        self.bundles: dict[str, DOBundle] = {}
+        self.stations: pd.DataFrame | None = None
         self.error: str | None = None
-        #: The HEC-RAS flow sweep, so a change in discharge can carry the
-        #: hydraulics with it. Optional: without it the API still answers, using
-        #: whatever the caller supplied.
-        self.sweep: pd.DataFrame | None = None
-        #: The held-out river result, written by scripts/holdout_river.py.
-        #: Optional in the same way: its absence costs /holdout and nothing
-        #: else, because no prediction depends on it.
-        self.holdout: dict | None = None
-        # Sync routes run in a threadpool, so two requests can race to build the
-        # same explainer. Building it twice is wasteful rather than wrong, but
-        # the lock keeps startup cost predictable.
-        self._explainer_lock = threading.Lock()
+        self._lock = threading.Lock()
 
-    # -- loading ------------------------------------------------------------
-
-    def load(self, models_dir: Path | None = None) -> ModelRegistry:
-        from aquanexus.ml.models import HabitatPredictor
-
-        models_dir = models_dir or settings.MODELS_DIR
-
-        # Loaded before the manifest check on purpose: the holdout result is a
-        # record of an experiment rather than a live capability, so an API with
-        # no models can still answer what happened when this one met a river it
-        # had not seen.
-        self.holdout = self._load_holdout()
-
-        manifest_path = models_dir / "manifest.json"
-        if not manifest_path.is_file():
-            self.error = (f"no manifest at {manifest_path}; "
-                          "run scripts/train_models.py")
-            log.error(self.error)
-            return self
-
-        self.manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        self.sweep = self._load_sweep()
-        for name, meta in self.manifest.get("models", {}).items():
-            path = models_dir / meta["path"]
-            if not path.is_file():
-                log.error("%s: %s is missing", name, path.name)
-                continue
-            try:
-                predictor = HabitatPredictor.load(path)
-            except Exception as exc:  # noqa: BLE001 - one bad model must not stop the rest
-                log.error("%s failed to load: %s", name, exc)
-                continue
-
-            self.models[name] = LoadedModel(
-                name=name, predictor=predictor, unit=meta.get("unit", ""),
-                labels=meta.get("labels", "observed"),
-                model_type=meta.get("model_type", "unknown"),
-                n_train=int(meta.get("n_train", 0)),
-                features=list(meta.get("features", predictor.feature_names)),
-                metrics=meta.get("metrics", {}),
-                caveats=list(meta.get("caveats", [])),
-                training_ranges={k: tuple(v) for k, v in
-                                 meta.get("training_ranges", {}).items()},
-                collinear_pairs=[list(pair) for pair in
-                                 meta.get("collinear_pairs", [])],
-                target_range=[float(v) for v in meta.get("target_range", [])],
-                background=self._load_background(models_dir, meta),
-            )
-            log.info("loaded %s (%s, %s labels)", name, meta.get("model_type"),
-                     meta.get("labels"))
-
-        if not self.models:
-            self.error = "no models could be loaded"
-        return self
-
-    @staticmethod
-    def _load_sweep() -> pd.DataFrame | None:
-        """Read the flow sweep, or None if it has not been generated."""
-        path = settings.PROCESSED_DIR / "ayase_flow_sweep.csv"
-        if not path.is_file():
-            log.warning("no flow sweep at %s; hydraulics cannot follow discharge",
-                        path)
-            return None
-        try:
-            sweep = pd.read_csv(path)
-        except Exception as exc:  # noqa: BLE001 - a bad sweep must not stop loading
-            log.warning("flow sweep could not be read: %s", exc)
-            return None
-        log.info("flow sweep: %d section(s) x %d discharge(s)",
-                 sweep["river_station"].nunique(), sweep["discharge_bc"].nunique())
-        return sweep
-
-    @staticmethod
-    def _load_holdout() -> dict | None:
-        """Read the held-out river result, or None if it has not been run.
-
-        Written by `scripts/holdout_river.py` in the same run that writes
-        `docs/HOLDOUT_RIVER.md`, so the served numbers and the written ones
-        cannot drift apart.
-        """
-        path = settings.PROCESSED_DIR / "holdout_naka.json"
-        if not path.is_file():
-            log.info("no holdout result at %s; /holdout will report 503", path)
-            return None
-        try:
-            evidence = json.loads(path.read_text(encoding="utf-8"))
-        except Exception as exc:  # noqa: BLE001 - a bad artefact must not stop loading
-            log.warning("holdout result could not be read: %s", exc)
-            return None
-        log.info("holdout: %s, %d observation(s)",
-                 evidence.get("river", {}).get("name", "?"), evidence.get("n", 0))
-        return evidence
-
-    def reach_hydraulics(self, discharge: float) -> dict[str, float]:
-        """Reach-mean depth, velocity, width and Froude number at one discharge.
-
-        Interpolated from the HEC-RAS sweep, which is how the training rows were
-        built: `build_water_quality_dataset` averages the same quantities over
-        the 53 cross-sections. Returns an empty dict when no sweep is loaded.
-        """
-        if self.sweep is None or not np.isfinite(discharge):
-            return {}
-
-        from aquanexus.data.dataset import interpolate_hydraulics
-
-        try:
-            sections = interpolate_hydraulics(self.sweep, float(discharge))
-        except Exception as exc:  # noqa: BLE001 - never cost the caller a prediction
-            log.warning("could not interpolate hydraulics at %.3f: %s", discharge, exc)
-            return {}
-
-        depth = float(sections["depth"].mean())
-        velocity = float(sections["velocity"].mean())
-        derived = {
-            "reach_depth": depth,
-            "reach_velocity": velocity,
-            "reach_top_width": float(sections["top_width"].mean()),
-        }
-        if depth > 0:
-            derived["reach_froude"] = velocity / float(np.sqrt(9.80665 * depth))
-        return derived
-
-    def explainer_for(self, model: LoadedModel):
-        """The model's SHAP explainer, built once and reused.
-
-        Returns None when the model has no background sample, which is the
-        caller's cue to report explanations as unavailable rather than to
-        explain a request against itself.
-        """
-        if model.explainer is not None:
-            return model.explainer
-        if model.background is None:
-            return None
-
-        from aquanexus.ml.explainer import HabitatExplainer
-
-        with self._explainer_lock:
-            if model.explainer is None:  # another thread may have won the race
-                model.explainer = HabitatExplainer(model.predictor).fit_explainer(
-                    model.background, max_background=50
-                )
-                log.info("explainer ready for %s", model.name)
-        return model.explainer
-
-    @staticmethod
-    def _load_background(models_dir: Path, meta: dict) -> pd.DataFrame | None:
-        """Read the saved training sample, or None if it is not there.
-
-        A missing background is not fatal: predictions do not need it, and
-        /explain reports that explanations are unavailable rather than serving
-        zeros.
-        """
-        name = meta.get("background")
-        if not name:
-            return None
-        path = models_dir / name
-        if not path.is_file():
-            log.warning("background %s is missing; explanations disabled", name)
-            return None
-        try:
-            return pd.read_csv(path)
-        except Exception as exc:  # noqa: BLE001 - a bad background must not stop loading
-            log.warning("background %s could not be read: %s", name, exc)
-            return None
-
-    def get(self, name: str) -> LoadedModel:
-        if name not in self.models:
-            raise KeyError(f"model {name!r} is not loaded; "
-                           f"available: {sorted(self.models)}")
-        return self.models[name]
+    @property
+    def models(self) -> dict[str, DOBundle]:
+        return self.bundles
 
     @property
     def ready(self) -> bool:
-        return bool(self.models)
+        return bool(self.bundles)
 
-    # -- feature construction ------------------------------------------------
+    def load(self, directory: Path | None = None) -> ModelRegistry:
+        directory = Path(directory) if directory else settings.MODELS_DIR / "do"
+        with self._lock:
+            self.bundles.clear()
+            self.stations, self.error = None, None
+            if not directory.is_dir():
+                self.error = f"no model directory at {directory}; run scripts/save_do_model.py"
+                return self
+            for path in sorted(p for p in directory.iterdir() if (p / "bundle.json").exists()):
+                try:
+                    self.bundles[path.name] = DOBundle.load(path)
+                except Exception as exc:  # noqa: BLE001 - one bad bundle must not hide the rest
+                    log.error("could not load %s: %s", path.name, exc)
+            table = directory / STATIONS_FILE
+            if table.exists():
+                self.stations = pd.read_parquet(table).set_index("station_id", drop=False)
+            if not self.bundles:
+                self.error = f"no model bundles found in {directory}"
+        return self
 
-    def build_features(self, state: dict, model: LoadedModel) -> pd.DataFrame:
-        """Turn a caller's environmental state into the model's feature row.
+    def get(self, mode: str) -> DOBundle:
+        if mode not in self.bundles:
+            raise KeyError(f"model '{mode}' is not loaded (available: {sorted(self.bundles)})")
+        return self.bundles[mode]
 
-        Derived quantities are computed here. Anything the caller did not supply
-        and that cannot be derived is left as NaN - the tree models split on it
-        natively and the linear pipeline imputes it, so a partial observation
-        still gets an answer rather than a validation error.
+    def station(self, station_id: int) -> pd.Series | None:
+        if self.stations is None or station_id not in self.stations.index:
+            return None
+        return self.stations.loc[station_id]
+
+    def search_stations(self, text: str | None, prefecture: int | None, limit: int) -> pd.DataFrame:
+        table = self.stations if self.stations is not None else pd.DataFrame()
+        if table.empty:
+            return table
+        if prefecture is not None:
+            table = table[table["pref_code"] == prefecture]
+        if text:
+            hit = table["name"].astype(str).str.contains(text, regex=False) | table[
+                "water_body"
+            ].astype(str).str.contains(text, regex=False)
+            table = table[hit]
+        return table.head(limit)
+
+    def build_input(self, bundle: DOBundle, request: dict) -> BuiltInput:
+        """Assemble one feature row from a request.
+
+        Station fields and history are filled from the station table when a
+        ``station_id`` is given. History is only used when the requested date is
+        after the station's last recorded visit; otherwise it would describe the
+        future of the sample, so it is left missing and a note says so.
         """
-        from aquanexus.data.preprocessor import do_saturation, froude_number
+        values: dict[str, float] = {}
+        notes: list[str] = []
+        day = pd.Timestamp(request["date"])
 
-        values = dict(state)
+        row = self.station(request["station_id"]) if request.get("station_id") else None
+        if request.get("station_id") and row is None:
+            raise KeyError(f"unknown station_id {request['station_id']}")
+        if row is not None:
+            values.update({k: row[k] for k in STATION_FIELDS})
+            if day > row["last_date"]:
+                values.update(
+                    prev_do=row["last_do"],
+                    prev_do_gap_days=float((day - row["last_date"]).days),
+                    station_do_mean=row["station_do_mean"],
+                    station_do_n=row["station_do_n"],
+                )
+            else:
+                notes.append(
+                    f"date is not after the station's last record ({row['last_date']:%Y-%m-%d}); "
+                    "its history features were left out"
+                )
 
-        temperature = values.get("water_temp")
-        if temperature is not None:
-            values.setdefault("do_saturation", float(do_saturation(temperature)))
+        for group in ("location", "weather", "history", "neighbors"):
+            values.update({k: v for k, v in (request.get(group) or {}).items() if v is not None})
 
-        depth, velocity = values.get("depth"), values.get("velocity")
-        if depth is not None and velocity is not None and depth > 0:
-            values.setdefault("froude_number", float(froude_number(velocity, depth)))
-            values.setdefault("reach_froude", values["froude_number"])
-        # The reach_* features are reach means in training; a caller supplying a
-        # single point is treated as describing that reach.
-        for source, alias in (("depth", "reach_depth"), ("velocity", "reach_velocity")):
-            if values.get(source) is not None:
-                values.setdefault(alias, values[source])
+        doy = day.dayofyear
+        values.update(
+            doy_sin=np.sin(2 * np.pi * doy / 365.25),
+            doy_cos=np.cos(2 * np.pi * doy / 365.25),
+            month=day.month,
+        )
+        frame = pd.DataFrame([{c: values.get(c, np.nan) for c in bundle.features}]).astype(float)
+        missing = [c for c in bundle.features if pd.isna(frame.iloc[0][c])]
+        ranges = bundle.metadata.get("training_ranges", {})
+        out = [
+            {"feature": c, "value": float(frame.iloc[0][c]), "training_min": lo, "training_max": hi}
+            for c, (lo, hi) in ranges.items()
+            if c in frame and not pd.isna(frame.iloc[0][c]) and not lo <= frame.iloc[0][c] <= hi
+        ]
+        return BuiltInput(frame, missing, out, notes)
 
-        # Anything still missing is interpolated from the HEC-RAS sweep at this
-        # discharge. `reach_top_width` has no caller-facing field at all, so
-        # without this it was NaN on every request and the linear pipeline
-        # imputed the training median - the same width whatever the flow.
-        discharge = values.get("discharge")
-        if discharge is not None:
-            for name, derived in self.reach_hydraulics(float(discharge)).items():
-                values.setdefault(name, derived)
-
-        month = values.get("month")
-        if month is not None:
-            values["month_sin"] = float(np.sin(2 * np.pi * month / 12.0))
-            values["month_cos"] = float(np.cos(2 * np.pi * month / 12.0))
-
-        if values.get("dissolved_oxygen") is not None and "do_saturation" in values:
-            values.setdefault("do_deficit",
-                              values["do_saturation"] - values["dissolved_oxygen"])
-
-        row = {name: values.get(name, np.nan) for name in model.features}
-        return pd.DataFrame([row], columns=model.features)
-
-    def check_ranges(self, state: dict, model: LoadedModel) -> list[dict]:
-        """Report values outside the model's training range.
-
-        Reported, not rejected. A model asked about conditions it has never seen
-        should answer and say so, rather than refuse or pretend.
-
-        Aliases are followed because :meth:`build_features` follows them: a
-        caller's point ``depth`` becomes the model's ``reach_depth``. Checking
-        only the literal name let an aliased value through unflagged - the model
-        was fed a depth outside anything it had seen and the response said the
-        state was fine.
-        """
-        warnings = []
-        for name, (low, high) in model.training_ranges.items():
-            value = state.get(name)
-            if value is None:
-                value = next((state[source] for source in FEATURE_ALIASES.get(name, ())
-                              if state.get(source) is not None), None)
-            if value is None or not np.isfinite(value):
-                continue
-            if value < low or value > high:
-                warnings.append({"feature": name, "value": float(value),
-                                 "training_min": float(low),
-                                 "training_max": float(high)})
-        return warnings
+    def contributions(self, bundle: DOBundle, row: pd.DataFrame) -> dict[str, float]:
+        """Exact TreeSHAP contributions in mg/L; they sum to the prediction minus ``bias``."""
+        raw = bundle.booster.predict(
+            row, num_iteration=bundle.booster.best_iteration, pred_contrib=True
+        )
+        names = [*bundle.features, "bias"]
+        return {n: float(v) for n, v in zip(names, raw[0], strict=True)}
 
 
-#: Process-wide registry, populated on application startup.
 registry = ModelRegistry()
+
+__all__ = ["BuiltInput", "ModelRegistry", "MODE_SUMMARY", "registry", "feat"]

@@ -8,7 +8,7 @@ than instantiating ``Settings`` yourself, so path resolution happens once.
 from pathlib import Path
 from typing import Literal
 
-from pydantic import field_validator, model_validator
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,29 +32,7 @@ class Settings(BaseSettings):
     MODELS_DIR: Path = DATA_DIR / "models"
     CACHE_DIR: Path = DATA_DIR / "cache"
 
-    # --- Study site ---
-    # Selected 2026-09-06; see docs/DATA_SOURCES.md for the availability audit
-    # that ruled out the Yodo River and settled on the Saitama rivers.
-    RIVER_NAME: str = "Ayase"
-    RIVER_NAME_JA: str = "綾瀬川"
-    RIVER_SYSTEM: str = "Tone"
-    # JGD2011 / Japan Plane Rectangular CS Zone 9 — matches the Saitama
-    # point-cloud release. Do not change without reprojecting the geometry.
-    CRS_EPSG: int = 6677
-
-    # --- ML ---
-    MODEL_TYPE: Literal["xgboost", "random_forest", "linear", "lstm"] = "xgboost"
-    RANDOM_SEED: int = 42
-    TEST_SIZE: float = 0.2
-    VAL_SIZE: float = 0.1
-
     # --- API ---
-    # /explain costs ~190 ms of SHAP per call. The cache makes a repeated state
-    # free; the rate limit caps how fast the expensive path can be entered.
-    # Both are per-process: with N uvicorn workers the effective ceiling is
-    # N x EXPLAIN_RATE_LIMIT. See docs/DEPLOYMENT.md.
-    EXPLAIN_RATE_LIMIT: int = 60  # requests per minute per client
-    EXPLAIN_CACHE_SIZE: int = 256
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     API_DEBUG: bool = False
@@ -69,13 +47,6 @@ class Settings(BaseSettings):
     # --- Logging ---
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     LOG_JSON: bool = False
-
-    @field_validator("TEST_SIZE", "VAL_SIZE")
-    @classmethod
-    def _fraction(cls, v: float) -> float:
-        if not 0.0 < v < 1.0:
-            raise ValueError("split fractions must lie strictly between 0 and 1")
-        return v
 
     @model_validator(mode="after")
     def _keep_data_paths_under_data_dir(self):

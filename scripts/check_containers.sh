@@ -119,11 +119,10 @@ headers_of() { curl -sS -o /dev/null -D - "$1"; }
 printf '\nAPI container: %s\n' "$API_IMAGE"
 
 if [ "$TRAINED" -eq 1 ]; then
-  # Read-only, so a container check can never write over artefacts that took a
-  # Windows-only HEC-RAS run and 9.5 GB of point cloud to produce. The API only
-  # reads them, and this is the one check CI cannot make.
-  if [ ! -f "$REPO/data/models/manifest.json" ]; then
-    printf '  [FAIL] --trained given, but %s/data/models has no manifest.json\n' "$REPO"
+  # Read-only, so a container check can never write over trained models. The API
+  # only reads them, and this is the one check CI cannot make.
+  if [ ! -f "$REPO/data/models/do/geo/bundle.json" ]; then
+    printf '  [FAIL] --trained given, but %s/data/models/do has no bundles\n' "$REPO"
     exit 1
   fi
   MOUNT="$REPO/data:/app/data:ro"
@@ -132,7 +131,6 @@ else
   # World-writable because the image runs as its own unprivileged user, whose uid
   # does not match the one that owns the checkout.
   mkdir -p "$WORK/data/processed" "$WORK/data/models"
-  cp "$REPO/data/processed/holdout_naka.json" "$WORK/data/processed/"
   chmod -R 777 "$WORK/data"
   MOUNT="$WORK/data:/app/data"
 
@@ -183,7 +181,7 @@ esac
 
 # Client routes are not files. Without the try_files fallback a reload on any
 # page but "/" is a 404 - the defect that only appears after deployment.
-for route in /predict /scenarios /analyze /transfer /about /no/such/page; do
+for route in /predict /models /about /no/such/page; do
   code="$(status_of "$WEB_URL$route")"
   route_body="$(body "$WEB_URL$route")"
   if [ "$code" = "200" ] && [ "$route_body" = "$index" ]; then

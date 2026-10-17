@@ -52,8 +52,8 @@ def _read(path: Path | str) -> pd.DataFrame:
 def _parse_censored(raw: pd.Series) -> tuple[pd.Series, pd.Series]:
     """Split a published value column into a number and a below-detection flag.
 
-    A ``<x`` reading becomes ``x / 2``, the same ``half`` convention as
-    :func:`aquanexus.data.loader.apply_censoring`, and is flagged.
+    A ``<x`` reading becomes ``x / 2`` (the usual half-detection-limit convention)
+    and is flagged.
     """
     text = raw.astype("string").str.strip()
     censored = text.str.startswith("<").fillna(False).astype(bool)

@@ -1,252 +1,177 @@
 """API tests.
 
-These run against the real trained models when present and skip otherwise, so a
-fresh clone without artefacts still gets a green suite. The provenance tests are
-the important ones: the API serves one model trained on synthetic labels, and a
-caller must be able to tell which is which from the response alone.
+They run against a small bundle trained inside the test on a toy frame, so the suite
+needs neither the real models nor the data. What they check is the contract: inputs
+are assembled correctly, missing and unusual inputs are reported, intervals bracket
+the prediction, and history is never taken from a date at or before the last record.
 """
 
 from __future__ import annotations
 
+import numpy as np
+import pandas as pd
 import pytest
 
-fastapi = pytest.importorskip("fastapi")
+pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from aquanexus.api.app import app  # noqa: E402
 from aquanexus.api.registry import registry  # noqa: E402
-from aquanexus.config import settings  # noqa: E402
+from aquanexus.data import features as feat  # noqa: E402
+from aquanexus.ml import do_experiment as ex  # noqa: E402
+from aquanexus.ml.do_bundle import DOBundle  # noqa: E402
 
-models_present = pytest.mark.skipif(
-    not (settings.MODELS_DIR / "manifest.json").is_file(),
-    reason="trained models absent; run scripts/train_models.py",
-)
+LAST = pd.Timestamp("2022-12-15")
 
-STATE = {
-    "water_temp": 24.5, "dissolved_oxygen": 7.2, "discharge": 12.0,
-    "depth": 1.8, "velocity": 0.45, "suspended_solids": 15.0, "month": 7,
-}
+
+def _toy_bundle(mode: str) -> DOBundle:
+    cols = feat.FEATURE_SETS["geo" if mode != "full" else "full"]
+    rng = np.random.default_rng(0)
+    frame = pd.DataFrame(rng.normal(size=(600, len(cols))), columns=cols)
+    frame["air_temp"] = rng.uniform(0, 30, 600)
+    y = 12 - 0.2 * frame["air_temp"] + rng.normal(0, 0.3, 600)
+    booster = ex.lgb.train(
+        {**ex.DEFAULT_PARAMS, "num_leaves": 7, "min_child_samples": 5},
+        ex.lgb.Dataset(frame, y),
+        num_boost_round=30,
+    )
+    meta = {
+        "low_do_weight": 1.0,
+        "trained_on": {"rows": 600},
+        "held_out_strict": {"r2": 0.5},
+        "held_out_note": "toy",
+        "importance": {"air_temp": 1.0},
+        "training_ranges": {"air_temp": [0.5, 29.5]},
+        "built": "2026-01-01",
+        "commit": "test",
+    }
+    return DOBundle(booster, cols, [6.0, 9.0], [1.5, 1.0, 0.8], 0.9, meta)
 
 
 @pytest.fixture
-def client():
-    with TestClient(app) as c:
-        yield c
-
-
-# ---------------------------------------------------------------------------
-# Meta
-# ---------------------------------------------------------------------------
-
-
-def test_root_describes_the_service(client):
-    body = client.get("/").json()
-    assert body["name"] == settings.PROJECT_NAME
-    assert "綾瀬川" in body["river"]
-
-
-def test_health_always_answers(client):
-    """Health must report degraded rather than fail when models are missing."""
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] in {"ok", "degraded"}
-
-
-@models_present
-def test_health_is_ok_with_models(client):
-    body = client.get("/health").json()
-    assert body["status"] == "ok"
-    assert set(body["models_loaded"]) == {"dissolved_oxygen", "hsi"}
-
-
-@models_present
-def test_models_endpoint_declares_label_provenance(client):
-    """The whole point: a caller can see which model is synthetic."""
-    by_target = {m["target"]: m for m in client.get("/models").json()}
-    assert by_target["dissolved_oxygen"]["labels"] == "observed"
-    assert by_target["hsi"]["labels"] == "SYNTHETIC"
-    assert any("SYNTHETIC" in c for c in by_target["hsi"]["caveats"])
-
-
-# ---------------------------------------------------------------------------
-# Prediction
-# ---------------------------------------------------------------------------
-
-
-@models_present
-@pytest.mark.parametrize("target", ["dissolved_oxygen", "hsi"])
-def test_predict_returns_a_value_with_caveats(client, target):
-    body = client.post("/predict", json={"state": STATE, "target": target}).json()
-    assert body["target"] == target
-    assert body["caveats"], "every prediction must carry its caveats"
-    assert body["interpretation"]
-
-
-@models_present
-def test_predicted_oxygen_is_physically_plausible(client):
-    body = client.post("/predict", json={"state": STATE,
-                                         "target": "dissolved_oxygen"}).json()
-    assert 0.0 <= body["prediction"] <= 25.0
-    assert body["unit"] == "mg/L"
-
-
-@models_present
-def test_predicted_hsi_is_bounded(client):
-    body = client.post("/predict", json={"state": STATE, "target": "hsi"}).json()
-    assert 0.0 <= body["prediction"] <= 1.0
-
-
-@models_present
-def test_out_of_range_input_is_flagged_not_refused(client):
-    """A model asked about unseen conditions should answer and say so."""
-    extreme = {**STATE, "discharge": 4000.0}
-    response = client.post("/predict", json={"state": extreme,
-                                             "target": "dissolved_oxygen"})
-    assert response.status_code == 200
-    flagged = {w["feature"] for w in response.json()["out_of_range"]}
-    assert "discharge" in flagged
-
-
-@models_present
-def test_partial_state_still_predicts(client):
-    """Missing fields are imputed, not rejected - a grab sample is partial."""
-    response = client.post("/predict", json={"state": {"water_temp": 20.0},
-                                             "target": "dissolved_oxygen"})
-    assert response.status_code == 200
-
-
-def test_empty_state_is_rejected(client):
-    response = client.post("/predict", json={"state": {}, "target": "dissolved_oxygen"})
-    assert response.status_code == 422
-
-
-def test_impossible_value_is_rejected_by_schema(client):
-    response = client.post("/predict",
-                           json={"state": {**STATE, "water_temp": 500.0},
-                                 "target": "dissolved_oxygen"})
-    assert response.status_code == 422
-
-
-def test_unknown_target_is_rejected(client):
-    response = client.post("/predict", json={"state": STATE, "target": "rainfall"})
-    assert response.status_code == 422
-
-
-# ---------------------------------------------------------------------------
-# Batch
-# ---------------------------------------------------------------------------
-
-
-@models_present
-def test_batch_returns_one_prediction_per_state(client):
-    states = [STATE, {**STATE, "water_temp": 31.0}, {**STATE, "water_temp": 8.0}]
-    body = client.post("/batch_predict",
-                       json={"states": states, "target": "dissolved_oxygen"}).json()
-    assert body["n"] == len(states) == len(body["predictions"])
-
-
-@models_present
-def test_batch_reflects_the_temperature_gradient(client):
-    """Colder water holds more oxygen; the batch should show it."""
-    states = [{**STATE, "water_temp": t} for t in (8.0, 20.0, 31.0)]
-    body = client.post("/batch_predict",
-                       json={"states": states, "target": "dissolved_oxygen"}).json()
-    assert body["predictions"][0] > body["predictions"][-1]
-
-
-def test_empty_batch_is_rejected(client):
-    assert client.post("/batch_predict",
-                       json={"states": [], "target": "hsi"}).status_code == 422
-
-
-# ---------------------------------------------------------------------------
-# Scenarios
-# ---------------------------------------------------------------------------
-
-
-@models_present
-def test_scenario_reports_baseline_and_change(client):
-    body = client.post("/scenario_run", json={
-        "scenario_name": "half_discharge", "baseline": STATE,
-        "modifications": {"discharge": -0.5}, "target": "dissolved_oxygen",
-    }).json()
-    assert body["change"] == pytest.approx(
-        body["scenario_prediction"] - body["baseline_prediction"]
+def client(tmp_path):
+    for mode in ("geo", "full"):
+        _toy_bundle(mode).save(tmp_path / mode)
+    stations = pd.DataFrame(
+        {
+            "station_id": [1001, 1002],
+            "pref_code": [11, 13],
+            "latitude": [35.8, 35.7],
+            "longitude": [139.8, 139.9],
+            "elevation": [3.0, 1.0],
+            "relief_10km": [5.0, 4.0],
+            "rel_elevation": [0.5, -0.5],
+            "last_date": [LAST, LAST],
+            "last_do": [6.5, 3.2],
+            "station_do_mean": [7.1, 4.0],
+            "station_do_n": [120, 90],
+            "name": ["綾瀬橋", "四ツ木橋"],
+            "water_body": ["綾瀬川", "中川"],
+        }
     )
-    assert body["applied"]["discharge"] == pytest.approx(STATE["discharge"] * 0.5)
+    stations.to_parquet(tmp_path / "stations.parquet")
+    registry.load(tmp_path)
+    with TestClient(app) as c:
+        registry.load(tmp_path)  # the app's startup load looks at the real models dir
+        yield c
+    registry.bundles.clear()
+    registry.stations = None
 
 
-@models_present
-def test_scenario_states_it_is_not_a_simulation(client):
-    """Callers must not read a scenario as a re-run of the hydraulic model."""
-    body = client.post("/scenario_run", json={
-        "scenario_name": "x", "baseline": STATE,
-        "modifications": {"discharge": -0.2}, "target": "hsi",
-    }).json()
-    assert any("not re-run" in c for c in body["caveats"])
+def request(**over):
+    base = {
+        "date": "2023-07-10",
+        "location": {"latitude": 35.8, "longitude": 139.8},
+        "weather": {"air_temp": 25.0},
+    }
+    return base | over
 
 
-@models_present
-def test_scenario_absolute_overrides_fractional(client):
-    body = client.post("/scenario_run", json={
-        "scenario_name": "x", "baseline": STATE,
-        "modifications": {"discharge": -0.5},
-        "absolute_modifications": {"discharge": 40.0},
-        "target": "dissolved_oxygen",
-    }).json()
-    assert body["applied"]["discharge"] == pytest.approx(40.0)
+def test_health_and_models(client):
+    health = client.get("/health").json()
+    assert health["status"] == "ok" and health["stations"] == 2
+    models = {m["mode"]: m for m in client.get("/models").json()}
+    assert set(models) == {"geo", "full"}
+    assert models["geo"]["held_out_strict"]["r2"] == 0.5
+    assert models["geo"]["interval_half_widths"] == [1.5, 1.0, 0.8]
 
 
-def test_scenario_rejects_a_field_absent_from_the_baseline(client):
-    response = client.post("/scenario_run", json={
-        "scenario_name": "x", "baseline": {"water_temp": 20.0},
-        "modifications": {"discharge": -0.2}, "target": "hsi",
-    })
-    assert response.status_code == 422
+def test_prediction_has_an_interval_that_brackets_it(client):
+    body = client.post("/predict", json=request()).json()
+    assert body["lower"] < body["prediction"] < body["upper"]
+    assert body["level"] == 0.9
+    assert body["caveats"]
 
 
-def test_scenario_rejects_a_change_below_minus_one(client):
-    response = client.post("/scenario_run", json={
-        "scenario_name": "x", "baseline": STATE,
-        "modifications": {"discharge": -1.5}, "target": "hsi",
-    })
-    assert response.status_code == 422
+def test_warmer_air_predicts_lower_oxygen(client):
+    cool = client.post("/predict", json=request(weather={"air_temp": 5.0})).json()
+    warm = client.post("/predict", json=request(weather={"air_temp": 28.0})).json()
+    assert warm["prediction"] < cool["prediction"]
 
 
-@models_present
-def test_low_flow_scenario_carries_the_unreliability_caveat(client):
-    """The model is known to misbehave at low flow; the caveat must travel."""
-    body = client.post("/scenario_run", json={
-        "scenario_name": "drought", "baseline": STATE,
-        "modifications": {"discharge": -0.9}, "target": "dissolved_oxygen",
-    }).json()
-    assert any("low flow" in c.lower() for c in body["caveats"])
+def test_missing_inputs_are_listed_not_hidden(client):
+    body = client.post("/predict", json=request()).json()
+    assert "rain_7d" in body["missing_features"]
+    assert "air_temp" not in body["missing_features"]
 
 
-# ---------------------------------------------------------------------------
-# Explanation
-# ---------------------------------------------------------------------------
+def test_out_of_range_input_is_flagged_not_refused(client):
+    body = client.post("/predict", json=request(weather={"air_temp": 40.0})).json()
+    flagged = {w["feature"] for w in body["out_of_range"]}
+    assert flagged == {"air_temp"}
 
 
-@models_present
-def test_explain_returns_contributions_for_every_feature(client):
-    body = client.post("/explain", json={"state": STATE,
-                                         "target": "dissolved_oxygen"}).json()
-    model = registry.get("dissolved_oxygen")
-    assert len(body["contributions"]) == len(model.features)
-    magnitudes = [abs(c["contribution"]) for c in body["contributions"]]
-    assert magnitudes == sorted(magnitudes, reverse=True)
+def test_station_fills_location_and_terrain(client):
+    body = client.post("/predict", json={"date": "2023-07-10", "station_id": 1001}).json()
+    assert "latitude" not in body["missing_features"]
+    assert "elevation" not in body["missing_features"]
 
 
-@models_present
-def test_contributions_sum_to_the_prediction_gap(client):
-    """SHAP's additivity property, which is what makes the numbers meaningful."""
-    body = client.post("/explain", json={"state": STATE,
-                                         "target": "dissolved_oxygen"}).json()
-    total = sum(c["contribution"] for c in body["contributions"])
-    assert total == pytest.approx(body["prediction"] - body["baseline"], abs=0.05)
+def test_history_is_used_only_after_the_last_record(client):
+    after = client.post(
+        "/predict", json={"date": "2023-07-10", "station_id": 1001, "mode": "full"}
+    ).json()
+    assert "prev_do" not in after["missing_features"]
+    before = client.post(
+        "/predict", json={"date": "2022-06-01", "station_id": 1001, "mode": "full"}
+    ).json()
+    assert "prev_do" in before["missing_features"]
+    assert any("history" in n for n in before["notes"])
 
 
-def test_explain_rejects_an_empty_state(client):
-    assert client.post("/explain", json={"state": {},
-                                         "target": "hsi"}).status_code == 422
+def test_contributions_sum_to_the_prediction(client):
+    body = client.post("/predict", json=request(explain=True)).json()
+    assert sum(body["contributions"].values()) == pytest.approx(body["prediction"], abs=1e-6)
+
+
+def test_a_place_is_required(client):
+    assert client.post("/predict", json={"date": "2023-07-10"}).status_code == 422
+
+
+def test_impossible_value_is_rejected_by_the_schema(client):
+    bad = request(weather={"air_temp": 90.0})
+    assert client.post("/predict", json=bad).status_code == 422
+
+
+def test_unknown_station_is_404(client):
+    assert client.post("/predict", json={"date": "2023-07-10", "station_id": 5}).status_code == 404
+
+
+def test_unloaded_mode_is_503(client):
+    body = request(mode="nowcast")
+    assert client.post("/predict", json=body).status_code == 503
+
+
+def test_batch_returns_one_prediction_per_request(client):
+    warm, cool = request(weather={"air_temp": 28.0}), request(weather={"air_temp": 5.0})
+    body = client.post("/batch_predict", json={"requests": [warm, cool]}).json()
+    assert body["n"] == 2
+    assert body["predictions"][0]["prediction"] < body["predictions"][1]["prediction"]
+
+
+def test_station_search(client):
+    found = client.get("/stations", params={"q": "綾瀬"}).json()
+    assert [s["station_id"] for s in found] == [1001]
+    assert client.get("/stations", params={"prefecture": 13}).json()[0]["station_id"] == 1002
+    assert client.get("/stations/1001").json()["name"] == "綾瀬橋"
+    assert client.get("/stations/9").status_code == 404

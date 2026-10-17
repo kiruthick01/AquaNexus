@@ -380,82 +380,46 @@ def test_stand_in_artefacts_cannot_be_mistaken_for_trained_ones():
     assert '"stand_in": True' in source
 
 
-def test_the_real_manifest_never_claims_to_be_a_stand_in():
-    """The flag is only meaningful if the trained manifest never carries it."""
+def test_trained_bundles_never_claim_to_be_stand_ins():
+    """The flag is only meaningful if a trained bundle never carries it."""
     from aquanexus.config import settings
 
-    manifest_path = settings.MODELS_DIR / "manifest.json"
-    if not manifest_path.is_file():
-        pytest.skip("no trained manifest; run scripts/train_models.py")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert "stand_in" not in manifest
+    bundles = sorted((settings.MODELS_DIR / "do").glob("*/bundle.json"))
+    if not bundles:
+        pytest.skip("no trained bundles; run scripts/save_do_model.py")
+    for path in bundles:
+        meta = json.loads(path.read_text(encoding="utf-8"))
+        assert "stand_in" not in meta["metadata"], path
 
 
 def test_stand_in_artefacts_load_and_refuse_to_overwrite(tmp_path, monkeypatch):
-    """End to end, because the schema is the point: what CI mounts must load.
+    """End to end, because the layout is the point: what CI mounts must load.
 
-    Runs the generator against a temporary data directory, loads the result
-    through the API's own registry, and then runs it a second time to check it
-    will not overwrite artefacts that are already there - which is what stops
-    somebody fabricating over a trained model on a machine that has one.
+    Runs the generator against a temporary data directory, loads the result through
+    the API's own registry, and then runs it a second time to check it will not
+    overwrite bundles that are already there - which is what stops somebody
+    fabricating over a trained model on a machine that has one.
     """
     from aquanexus.api.registry import ModelRegistry
     from aquanexus.config import settings
 
-    for name in ("DATA_DIR", "RAW_DIR", "PROCESSED_DIR", "MODELS_DIR",
-                 "CACHE_DIR"):
-        target = tmp_path if name == "DATA_DIR" else tmp_path / name.split("_")[0].lower()
-        monkeypatch.setattr(settings, name, target)
+    monkeypatch.setattr(settings, "MODELS_DIR", tmp_path / "models")
 
     generator = load_script("make_stand_in_artifacts")
     monkeypatch.setattr(sys, "argv", ["make_stand_in_artifacts.py"])
     assert generator.main() == 0
 
-    manifest = json.loads((settings.MODELS_DIR / "manifest.json").read_text("utf-8"))
-    assert manifest["stand_in"] is True
-    for meta in manifest["models"].values():
-        assert meta["caveats"][0].startswith("STAND-IN ARTEFACT")
-
-    registry = ModelRegistry().load(settings.MODELS_DIR)
+    registry = ModelRegistry().load(settings.MODELS_DIR / "do")
     assert registry.error is None
-    assert {"dissolved_oxygen", "hsi"} == set(registry.models)
-    for model in registry.models.values():
-        assert model.background is not None, "SHAP would explain a request against itself"
-        assert model.collinear_pairs
+    assert set(registry.bundles) == {"geo", "full"}
+    assert registry.stations is not None and len(registry.stations) == 2
+    for bundle in registry.bundles.values():
+        assert bundle.metadata["stand_in"] is True
+        assert bundle.metadata["held_out_note"].startswith("STAND-IN ARTEFACT")
 
-    # Second run, no --force: refuses, and leaves what is there alone.
-    before = (settings.MODELS_DIR / "manifest.json").read_bytes()
+    before = (settings.MODELS_DIR / "do" / "geo" / "bundle.json").read_bytes()
     assert generator.main() == 1
-    assert before == (settings.MODELS_DIR / "manifest.json").read_bytes()
-
-
-def test_the_stand_in_manifest_matches_the_trained_one(tmp_path, monkeypatch):
-    """Same fields, because the same code writes both.
-
-    Skipped without trained artefacts. Where they exist, this is what stops the
-    container check from passing against a shape the real deployment never has.
-    """
-    from aquanexus.config import settings
-
-    real_path = settings.MODELS_DIR / "manifest.json"
-    if not real_path.is_file():
-        pytest.skip("no trained manifest; run scripts/train_models.py")
-    real = json.loads(real_path.read_text(encoding="utf-8"))
-
-    for name in ("DATA_DIR", "RAW_DIR", "PROCESSED_DIR", "MODELS_DIR",
-                 "CACHE_DIR"):
-        target = tmp_path if name == "DATA_DIR" else tmp_path / name.split("_")[0].lower()
-        monkeypatch.setattr(settings, name, target)
-
-    generator = load_script("make_stand_in_artifacts")
-    monkeypatch.setattr(sys, "argv", ["make_stand_in_artifacts.py"])
-    assert generator.main() == 0
-    stand_in = json.loads((settings.MODELS_DIR / "manifest.json").read_text("utf-8"))
-
-    assert set(real["models"]) == set(stand_in["models"])
-    for name, meta in real["models"].items():
-        assert set(meta) == set(stand_in["models"][name]), f"{name} manifest fields differ"
-        assert meta["features"] == stand_in["models"][name]["features"]
+    assert before == (settings.MODELS_DIR / "do" / "geo" / "bundle.json").read_bytes()
 
 
 #: Long options BusyBox wget accepts. The Alpine image has BusyBox, not GNU
@@ -506,8 +470,7 @@ def test_probes_use_the_loopback_address_rather_than_a_name(dockerfile,
 def test_the_container_check_can_run_against_the_trained_artefacts(container_check):
     """The one check CI cannot make, available in one flag on a machine with a daemon.
 
-    Read-only, because the artefacts took a Windows-only HEC-RAS run over 9.5 GB
-    of point cloud to produce and a container check is not worth risking them.
+    Read-only, so that a container check can never write over trained models.
     """
     assert "--trained" in container_check
     assert "/app/data:ro" in container_check, "the trained mount must be read-only"
