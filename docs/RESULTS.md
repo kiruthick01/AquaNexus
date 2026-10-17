@@ -24,8 +24,10 @@ Early stopping uses stations carved out of the training set, never test rows.
 within 10 days), `nowcast` (`nowcast_basic` + the same summaries over stations within 5 km and over
 stations on a same-named river within 60 km), `history` (`geo` + the station's own earlier
 readings), `full_basic` (`nowcast_basic` + `history`), `full` (`nowcast` + `history`), `concurrent`
-(`geo` + same-sample pH, BOD, SS; a soft sensor, not a forecast). The served `nowcast` and `full`
-models use the same-named sets.
+(`geo` + same-sample pH, BOD, SS; a soft sensor, not a forecast). `geo_lu` and `nowcast_lu` add land use shares within 1 and 5 km (`geo` + `LAND`, `nowcast` + `LAND`),
+and `full_lu` does the same for `full`. The served `geo` and `nowcast` models use `geo_lu` and
+`nowcast_lu`; the served `full` models use `full`, because land use did not help once the station's
+own history is known.
 Neighbour and history features use only other visits, never the sample's own label; a test in
 `tests/test_features.py` checks that tampering with a station's labels leaves its own neighbour
 features unchanged.

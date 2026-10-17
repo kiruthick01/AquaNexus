@@ -209,3 +209,16 @@ def test_station_search(client):
     assert client.get("/stations", params={"prefecture": 13}).json()[0]["station_id"] == 1002
     assert client.get("/stations/1001").json()["name"] == "綾瀬橋"
     assert client.get("/stations/9").status_code == 404
+
+
+def test_coordinates_next_to_a_station_borrow_its_terrain(client):
+    body = client.post("/predict", json=request()).json()  # 35.8, 139.8 is station 1001
+    assert "elevation" not in body["missing_features"]
+    assert any("taken from station 1001" in note for note in body["notes"])
+
+
+def test_coordinates_far_from_any_station_borrow_nothing(client):
+    far = request(location={"latitude": 43.0, "longitude": 141.3})
+    body = client.post("/predict", json=far).json()
+    assert "elevation" in body["missing_features"]
+    assert not body["notes"]

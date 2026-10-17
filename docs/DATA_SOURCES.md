@@ -49,8 +49,24 @@ Three sources, all open. Each result in this repository traces to files fetched 
   (`aquanexus.data.geography`).
 - Terms: 政府標準利用規約 (Japanese Government Standard Terms of Use).
 
+## Land use: 国土数値情報 L03-b
+
+- **What:** 土地利用細分メッシュ, FY2016 (平成28年), 100 m mesh, world geodetic datum, GML. One zip
+  per 1st-order mesh (40 km by 80 km) from https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-L03-b.html.
+  The 113 files covering the stations are about 920 MB (`data/raw/landuse/`, gitignored).
+- **How:** `scripts/fetch_landuse.py` reads the site's own listing page and downloads those files
+  sequentially with a pause, resumable. The terms of use require a source credit and say nothing
+  against scripted download; the files were fetched with the user's approval.
+- **Derived:** for each station, the share of paddy, other farm, forest, barren, urban (buildings,
+  roads, rail), other and water cells within 1 km and 5 km, over land cells only, plus the sea
+  fraction and land cell count (`aquanexus.data.landuse`, `scripts/build_landuse.py`). These are
+  circular buffers around the station, not upstream catchments: no flow-direction data is used.
+- **Newest year offered in this layout is FY2016**, so land use is two to six years older than the
+  samples; land use changes slowly, but this is a source of error.
+- **Cite as:** 出典 国土交通省 国土数値情報（土地利用細分メッシュ）を加工して作成.
+
 ## What was considered and not used
 
-- Land use and catchment data (国土数値情報) and distance to coast: would need further downloads.
+- Distance to coast: would need coastline data.
 - Fish and benthic surveys, river point clouds, HEC-RAS hydraulics: belonged to the earlier
   two-river version; see `docs/archive/`.

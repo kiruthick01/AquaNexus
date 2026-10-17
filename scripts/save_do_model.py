@@ -31,8 +31,8 @@ log = get_logger("scripts.save_do_model")
 BINS = (6.0, 9.0)
 # (bundle name, feature set, low-DO sample weight)
 BUNDLES = [
-    ("geo", "geo", 1.0),
-    ("nowcast", "nowcast", 1.0),
+    ("geo", "geo_lu", 1.0),
+    ("nowcast", "nowcast_lu", 1.0),
     ("full", "full", 1.0),
     ("full_alert", "full", 10.0),
 ]
@@ -78,7 +78,7 @@ def classifier_results(results: Path, feature_set: str) -> dict:
     return {k: round(float(row.iloc[0][k]), 4) for k in keep if k in row}
 
 
-def station_table(frame: pd.DataFrame, raw: Path) -> pd.DataFrame:
+def station_table(frame: pd.DataFrame, raw: Path, landuse: Path | None = None) -> pd.DataFrame:
     """One row per station: identity, terrain and where its history stands.
 
     The history columns let the API fill history features for a station on a date
@@ -92,7 +92,10 @@ def station_table(frame: pd.DataFrame, raw: Path) -> pd.DataFrame:
     table = table.merge(mean, on="station_id")
     names = moe.load_stations(moe.find_files(raw, "mm")).sort_values("fiscal_year")
     names = names.drop_duplicates("station_id", keep="last")[["station_id", "name", "water_body"]]
-    return table.merge(names, on="station_id", how="left").reset_index(drop=True)
+    table = table.merge(names, on="station_id", how="left")
+    if landuse is not None and landuse.exists():
+        table = table.merge(pd.read_csv(landuse), on="station_id", how="left")
+    return table.reset_index(drop=True)
 
 
 def feature_ranges(frame: pd.DataFrame, cols: list[str]) -> dict[str, list[float]]:
@@ -108,6 +111,7 @@ def main() -> None:
     parser.add_argument("--out", type=Path, default=Path("data/models/do"))
     parser.add_argument("--level", type=float, default=0.9)
     parser.add_argument("--raw", type=Path, default=Path("data/raw/moe"))
+    parser.add_argument("--landuse", type=Path, default=Path("data/cache/landuse.csv"))
     args = parser.parse_args()
 
     frame = pd.read_parquet(args.cache)
@@ -119,7 +123,7 @@ def main() -> None:
     log.info("fit %d rows, calibration %d rows", len(fit), len(calibration))
 
     args.out.mkdir(parents=True, exist_ok=True)
-    station_table(frame, args.raw).to_parquet(args.out / "stations.parquet")
+    station_table(frame, args.raw, args.landuse).to_parquet(args.out / "stations.parquet")
 
     for name, feature_set, weight in BUNDLES:
         cols = feat.FEATURE_SETS[feature_set]

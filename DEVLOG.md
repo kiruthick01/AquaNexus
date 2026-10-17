@@ -46,13 +46,19 @@ What did and did not work:
   the river name with segment marks stripped) lifted `nowcast` from 0.516 to 0.549 and `full`
   from 0.715 to 0.728 on the strict regime, and `nowcast` on the Ayase from 0.33 to 0.63. On the
   temporal regime `nowcast` moved the other way (0.632 to 0.612), so the gain is not uniform.
+- Land use (国土数値情報, 100 m mesh, shares within 1 and 5 km of each station; 113 files, 920 MB,
+  downloaded with approval): strict-regime R² `geo` 0.484 to 0.504, `nowcast` 0.549 to 0.560,
+  `full` 0.728 to 0.726 (no gain). On unseen stations the gain for `geo` is larger (0.502 to 0.536)
+  and recall of DO below 5 mg/L for `geo` rose from 20% to 23%. Ayase `geo` 0.51 to 0.60, Naka 0.34
+  to 0.43. Served `geo` and `nowcast` use land use; `full` does not. Shares are circular buffers
+  around the station, not upstream catchments, and the mesh is FY2016.
 - A dedicated below-5 classifier ranks low-oxygen samples better than thresholding the regression
-  (AUC 0.88/0.90/0.97 against 0.83/0.86/0.95) and its raw probabilities are well calibrated.
+  (AUC 0.91/0.92/0.97 against 0.86/0.88/0.95) and its raw probabilities are well calibrated.
   Isotonic recalibration hurt, so it is not used.
 - Tuning moved held-out R² by less than 0.01 on unseen stations. Defaults are served.
 - Tail weighting (weights 3, 10, 30) raises recall of DO below 5 mg/L at a steep cost in
   precision; weight 10 is served as `full_alert`.
-- Interval coverage: about 0.89 at 0.90 nominal overall, 0.35-0.57 for samples below 5 mg/L (`geo` to `full`).
+- Interval coverage: about 0.89 at 0.90 nominal overall, 0.40-0.57 for samples below 5 mg/L (`geo` to `full`).
 
 ### Integrity check: neighbour features and held-out stations
 
@@ -75,6 +81,6 @@ neighbours of a new station are the stations that exist.
 
 ### Open items
 
-- Land use / catchment data and distance to coast would need further downloads.
+- Upstream catchment (needs flow direction) and distance to coast would need further data.
 - Low-oxygen events remain poorly predicted; a classifier and adaptive intervals are the next
   things to try.

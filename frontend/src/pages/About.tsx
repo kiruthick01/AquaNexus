@@ -19,6 +19,10 @@ export default function About() {
             wind (MERRA-2 and GPM IMERG), on a 0.5° grid.
           </li>
           <li>
+            <strong>Land use:</strong> 国土数値情報 土地利用細分メッシュ (FY2016, 100 m): the share of
+            paddy, farm, forest, urban and water within 1 and 5 km of each station.
+          </li>
+          <li>
             <strong>Terrain:</strong> station elevation from 国土地理院's national elevation model,
             plus relief among stations within 10 km.
           </li>

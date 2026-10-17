@@ -39,7 +39,14 @@ def slim(frame: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
     return out
 
 
-def load_frame(raw: Path, weather: Path, elevation: Path, cache: Path, rebuild: bool):
+def load_frame(
+    raw: Path,
+    weather: Path,
+    elevation: Path,
+    cache: Path,
+    rebuild: bool,
+    landuse: Path | None = None,
+):
     """Build (or load) the feature frame, keeping held-out stations out of neighbour pools.
 
     Excluding the stations that the ``station`` and ``strict`` regimes never train on
@@ -51,7 +58,9 @@ def load_frame(raw: Path, weather: Path, elevation: Path, cache: Path, rebuild: 
         moe.load_samples(moe.find_files(raw, "mk")), moe.load_stations(moe.find_files(raw, "mm"))
     )
     held = ex.held_out_stations(data["station_id"])
-    frame = feat.build_frame(raw, weather, elevation, exclude_from_neighbors=held)
+    frame = feat.build_frame(
+        raw, weather, elevation, exclude_from_neighbors=held, landuse_cache=landuse
+    )
     cache.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(cache)
     return frame
@@ -115,6 +124,7 @@ def main() -> None:
     parser.add_argument("--raw", type=Path, default=Path("data/raw/moe"))
     parser.add_argument("--weather", type=Path, default=Path("data/cache/weather"))
     parser.add_argument("--elevation", type=Path, default=Path("data/cache/elevation.csv"))
+    parser.add_argument("--landuse", type=Path, default=Path("data/cache/landuse.csv"))
     parser.add_argument("--cache", type=Path, default=Path("data/processed/do_frame.parquet"))
     parser.add_argument("--sets", nargs="*", default=None, help="subset of feature sets")
     parser.add_argument("--out", type=Path, default=Path("experiments/do_results.csv"))
@@ -127,7 +137,9 @@ def main() -> None:
 
     sets = {k: v for k, v in feat.FEATURE_SETS.items() if not args.sets or k in args.sets}
     needed = sorted({c for cols in sets.values() for c in cols})
-    full = load_frame(args.raw, args.weather, args.elevation, args.cache, args.rebuild)
+    full = load_frame(
+        args.raw, args.weather, args.elevation, args.cache, args.rebuild, args.landuse
+    )
     frame = slim(full, needed)
     del full
     log.info("%d rows, %d stations", len(frame), frame["station_id"].nunique())

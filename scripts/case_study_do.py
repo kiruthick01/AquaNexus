@@ -62,7 +62,7 @@ def main() -> None:
 
         record("climatology", "-", ex.climatology(train, test))
         record("persistence", "history", ex.persistence(test))
-        for fs in ("geo", "nowcast", "full"):
+        for fs in ("geo", "geo_lu", "nowcast", "nowcast_lu", "full"):
             cols = feat.FEATURE_SETS[fs]
             booster = ex.fit_lgbm(train, cols)
             record("lgbm_default", fs, ex.predict_lgbm(booster, test, cols))

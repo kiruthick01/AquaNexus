@@ -62,6 +62,10 @@ WEATHER = [
     "wind",
 ]
 GEO = ["elevation", "relief_10km", "rel_elevation"]
+_LU_CLASSES = ["paddy", "farm", "forest", "barren", "urban", "other", "water"]
+LAND = [f"lu_{c}_{km}km" for km in ("1", "5") for c in _LU_CLASSES] + [
+    f"{c}_{km}km" for km in ("1", "5") for c in ("lu_sea", "lu_land_cells")
+]
 HISTORY = ["prev_do", "prev_do_gap_days", "station_do_mean", "station_do_n"]
 NEIGHBOR_PRIOR = ["nb_do_prior", "nb_do_prior_n", "nb_count", "nb_dist_mean"]
 NEIGHBOR_NOW = ["nb_do_now", "nb_do_now_n"]
@@ -80,6 +84,9 @@ FEATURE_SETS = {
     "full_basic": _ENV + GEO + NEIGHBOR_PRIOR + NEIGHBOR_NOW + HISTORY,
     "full": _ENV + GEO + NEIGHBOR_PRIOR + NEIGHBOR_NOW + NEAR + RIVER + HISTORY,
     "concurrent": _ENV + GEO + CONCURRENT,
+    "geo_lu": _ENV + GEO + LAND,
+    "nowcast_lu": _ENV + GEO + LAND + NEIGHBOR_PRIOR + NEIGHBOR_NOW + NEAR + RIVER,
+    "full_lu": _ENV + GEO + LAND + NEIGHBOR_PRIOR + NEIGHBOR_NOW + NEAR + RIVER + HISTORY,
 }
 
 
@@ -225,6 +232,7 @@ def build_frame(
     weather_dir: Path | str,
     elevation_cache: Path | str | None = None,
     exclude_from_neighbors: set | None = None,
+    landuse_cache: Path | str | None = None,
 ) -> pd.DataFrame:
     """Samples + stations + weather + season + terrain + neighbours + history.
 
@@ -241,6 +249,8 @@ def build_frame(
             pd.read_csv(elevation_cache), frame.drop_duplicates("station_id")
         )
         frame = frame.merge(terrain, on="station_id", how="left")
+    if landuse_cache is not None and Path(landuse_cache).exists():
+        frame = frame.merge(pd.read_csv(landuse_cache), on="station_id", how="left")
     pool = None if not exclude_from_neighbors else ~frame["station_id"].isin(exclude_from_neighbors)
     frame = add_neighbors(frame, pool=pool)
     return add_history(frame)

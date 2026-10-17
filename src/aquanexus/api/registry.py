@@ -18,6 +18,9 @@ log = get_logger("api.registry")
 
 STATIONS_FILE = "stations.parquet"
 STATION_FIELDS = ["latitude", "longitude", "elevation", "relief_10km", "rel_elevation"]
+SITE_FIELDS = ["elevation", "relief_10km", "rel_elevation", *feat.LAND]
+#: A point this close to a monitoring station borrows that station's terrain and land use.
+NEAREST_STATION_KM = 3.0
 HISTORY_FIELDS = ["prev_do", "prev_do_gap_days", "station_do_mean", "station_do_n"]
 #: Features that carry an actual oxygen reading from somewhere else. Counts and
 #: distances do not: they are available for any location without monitoring data.
@@ -29,7 +32,7 @@ SIGNAL_FEATURES = {
 
 #: What each served model needs from the caller, for display next to the model.
 MODE_SUMMARY = {
-    "geo": "Coordinates, date and weather. Works anywhere, no monitoring needed.",
+    "geo": "Coordinates, date, weather; terrain and land use from the nearest station.",
     "nowcast": "geo plus what neighbouring stations read in the last 10 days.",
     "full": "nowcast plus the station's own earlier readings. Most accurate.",
     "full_alert": "full, tuned to catch low-oxygen events (more false alarms).",
@@ -104,6 +107,18 @@ class ModelRegistry:
             table = table[hit]
         return table.head(limit)
 
+    def nearest_station(self, latitude, longitude) -> tuple[pd.Series, float] | None:
+        """The closest monitoring station within ``NEAREST_STATION_KM``, with its distance."""
+        if self.stations is None or latitude is None or longitude is None:
+            return None
+        lat = np.radians(self.stations["latitude"].to_numpy())
+        lon = np.radians(self.stations["longitude"].to_numpy())
+        la, lo = np.radians(latitude), np.radians(longitude)
+        a = np.sin((lat - la) / 2) ** 2 + np.cos(la) * np.cos(lat) * np.sin((lon - lo) / 2) ** 2
+        km = 2 * 6371.0 * np.arcsin(np.sqrt(a))
+        i = int(np.argmin(km))
+        return (self.stations.iloc[i], float(km[i])) if km[i] <= NEAREST_STATION_KM else None
+
     def build_input(self, bundle: DOBundle, request: dict) -> BuiltInput:
         """Assemble one feature row from a request.
 
@@ -120,7 +135,8 @@ class ModelRegistry:
         if request.get("station_id") and row is None:
             raise KeyError(f"unknown station_id {request['station_id']}")
         if row is not None:
-            values.update({k: row[k] for k in STATION_FIELDS})
+            values.update({k: row[k] for k in STATION_FIELDS if k in row.index})
+            values.update({k: row[k] for k in feat.LAND if k in row.index})
             if day > row["last_date"]:
                 values.update(
                     prev_do=row["last_do"],
@@ -136,6 +152,22 @@ class ModelRegistry:
 
         for group in ("location", "weather", "history", "neighbors"):
             values.update({k: v for k, v in (request.get(group) or {}).items() if v is not None})
+
+        if row is None:
+            near = self.nearest_station(values.get("latitude"), values.get("longitude"))
+            if near is not None:
+                station, km = near
+                borrowed = [
+                    c
+                    for c in SITE_FIELDS
+                    if c in station.index and c in bundle.features and c not in values
+                ]
+                values.update({c: station[c] for c in borrowed})
+                if borrowed:
+                    notes.append(
+                        f"terrain and land use taken from station {station['station_id']} "
+                        f"({station['name']}), {km:.1f} km away"
+                    )
 
         doy = day.dayofyear
         values.update(
