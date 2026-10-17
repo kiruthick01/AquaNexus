@@ -30,7 +30,6 @@ class Settings(BaseSettings):
     RAW_DIR: Path = DATA_DIR / "raw"
     PROCESSED_DIR: Path = DATA_DIR / "processed"
     MODELS_DIR: Path = DATA_DIR / "models"
-    HECRAS_DIR: Path = DATA_DIR / "hecras"
     CACHE_DIR: Path = DATA_DIR / "cache"
 
     # --- Study site ---
@@ -42,14 +41,6 @@ class Settings(BaseSettings):
     # JGD2011 / Japan Plane Rectangular CS Zone 9 — matches the Saitama
     # point-cloud release. Do not change without reprojecting the geometry.
     CRS_EPSG: int = 6677
-
-    # --- HEC-RAS ---
-    # Verified against HEC-RAS 7.0 (April 2026) via its COM controller. If this
-    # path is wrong, runner.find_hecras_exe() falls back to scanning the install
-    # root, so a version bump does not break the pipeline.
-    HECRAS_EXE: Path = Path(r"C:\Program Files (x86)\HEC\HEC-RAS\7.0\Ras.exe")
-    HECRAS_VERSION: str = "7.00"  # written into generated .g01 headers
-    HECRAS_TIMEOUT: int = 600  # seconds per simulation run
 
     # --- ML ---
     MODEL_TYPE: Literal["xgboost", "random_forest", "linear", "lstm"] = "xgboost"
@@ -103,7 +94,7 @@ class Settings(BaseSettings):
         if "DATA_DIR" not in self.model_fields_set:
             return self
         for name, child in (("RAW_DIR", "raw"), ("PROCESSED_DIR", "processed"),
-                            ("MODELS_DIR", "models"), ("HECRAS_DIR", "hecras"),
+                            ("MODELS_DIR", "models"),
                             ("CACHE_DIR", "cache")):
             if name not in self.model_fields_set:
                 object.__setattr__(self, name, self.DATA_DIR / child)
@@ -119,7 +110,6 @@ class Settings(BaseSettings):
             self.RAW_DIR,
             self.PROCESSED_DIR,
             self.MODELS_DIR,
-            self.HECRAS_DIR,
             self.CACHE_DIR,
         ):
             path.mkdir(parents=True, exist_ok=True)

@@ -1,9 +1,4 @@
-"""Validator tests.
-
-The headline case is the RS 200 constriction found on the real Ayase tile: a
-section extracted 1.9 m wide between neighbours of 10-13 m, which drove velocity
-to 2.46 m/s where neighbours ran at 0.5. Nothing else in the pipeline noticed.
-"""
+"""Validator tests for observations and the merged dataset."""
 
 import numpy as np
 import pandas as pd
@@ -13,24 +8,7 @@ from aquanexus.data.validator import (
     Report,
     validate_dataset,
     validate_observations,
-    validate_sections,
 )
-from aquanexus.hecras.geometry import CrossSection
-
-
-def section(river_station, width=40.0, depth=3.0, points=41, invert=5.0):
-    """A V-shaped section of a given top width."""
-    station = np.linspace(0.0, width, points)
-    centre = width / 2.0
-    elevation = invert + depth * (np.abs(station - centre) / centre) ** 2
-    return CrossSection(river_station, station, elevation, (0.0, 0.0), (1.0, 0.0))
-
-
-def reach(n=5, width=40.0):
-    # Bed falls downstream: invert decreases as river station decreases.
-    return [section(100.0 * (i + 1), width=width, invert=5.0 + 0.1 * i)
-            for i in range(n)]
-
 
 # ---------------------------------------------------------------------------
 # Report
@@ -50,79 +28,6 @@ def test_issue_renders_location():
     r.add("check", "error", "broke", "RS 200")
     assert "[RS 200]" in str(r.issues[0])
     assert "ERROR" in str(r.issues[0])
-
-
-# ---------------------------------------------------------------------------
-# Cross-sections
-# ---------------------------------------------------------------------------
-
-
-def test_clean_reach_passes():
-    report = validate_sections(reach())
-    assert report.ok
-    assert not any(i.check == "section.constriction" for i in report.issues)
-
-
-def test_constriction_is_flagged():
-    """The real RS 200 defect: far narrower than both neighbours."""
-    sections = reach(5)
-    sections[2] = section(300.0, width=2.0, invert=5.2)
-    report = validate_sections(sections)
-    flagged = [i for i in report.issues if i.check == "section.constriction"]
-    assert len(flagged) == 1
-    assert "RS 300" in flagged[0].location
-
-
-def test_uniform_narrow_reach_is_not_flagged():
-    """A genuinely narrow river must not trip the neighbour comparison."""
-    report = validate_sections(reach(5, width=3.0))
-    assert not any(i.check == "section.constriction" for i in report.issues)
-
-
-def test_empty_section_is_an_error():
-    sections = reach(3)
-    sections.append(CrossSection(400.0, np.empty(0), np.empty(0), (0, 0), (1, 0)))
-    report = validate_sections(sections)
-    assert any(i.check == "section.empty" and i.severity == "error"
-               for i in report.issues)
-
-
-def test_no_sections_at_all():
-    report = validate_sections([])
-    assert not report.ok
-    assert report.issues[0].check == "sections.empty"
-
-
-def test_sparse_section_warns():
-    sections = reach(3)
-    sections[1] = section(200.0, points=5)
-    assert any(i.check == "section.sparse" for i in validate_sections(sections).issues)
-
-
-def test_unsorted_stations_are_an_error():
-    xs = section(100.0)
-    xs.station = xs.station[::-1].copy()
-    assert any(i.check == "section.station_order"
-               for i in validate_sections([xs]).issues)
-
-
-def test_nonfinite_elevation_is_an_error():
-    xs = section(100.0)
-    xs.elevation[3] = np.nan
-    assert any(i.check == "section.nonfinite" for i in validate_sections([xs]).issues)
-
-
-def test_invert_jump_warns():
-    sections = [section(100.0, invert=5.0), section(200.0, invert=12.0)]
-    assert any(i.check == "section.invert_jump"
-               for i in validate_sections(sections).issues)
-
-
-def test_bed_rising_downstream_warns():
-    """Stationing convention mistakes show up as a reversed bed slope."""
-    sections = [section(100.0 * (i + 1), invert=8.0 - 0.5 * i) for i in range(4)]
-    assert any(i.check == "reach.slope_sign"
-               for i in validate_sections(sections).issues)
 
 
 # ---------------------------------------------------------------------------

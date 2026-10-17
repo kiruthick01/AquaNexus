@@ -403,7 +403,7 @@ def test_stand_in_artefacts_load_and_refuse_to_overwrite(tmp_path, monkeypatch):
     from aquanexus.config import settings
 
     for name in ("DATA_DIR", "RAW_DIR", "PROCESSED_DIR", "MODELS_DIR",
-                 "HECRAS_DIR", "CACHE_DIR"):
+                 "CACHE_DIR"):
         target = tmp_path if name == "DATA_DIR" else tmp_path / name.split("_")[0].lower()
         monkeypatch.setattr(settings, name, target)
 
@@ -443,7 +443,7 @@ def test_the_stand_in_manifest_matches_the_trained_one(tmp_path, monkeypatch):
     real = json.loads(real_path.read_text(encoding="utf-8"))
 
     for name in ("DATA_DIR", "RAW_DIR", "PROCESSED_DIR", "MODELS_DIR",
-                 "HECRAS_DIR", "CACHE_DIR"):
+                 "CACHE_DIR"):
         target = tmp_path if name == "DATA_DIR" else tmp_path / name.split("_")[0].lower()
         monkeypatch.setattr(settings, name, target)
 

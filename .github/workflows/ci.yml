@@ -31,7 +31,7 @@ jobs:
           cache: pip
 
       - name: Install
-        # No geo or hecras extras: GDAL is heavy and HEC-RAS is Windows-only.
+        # No geo extra: GDAL is heavy.
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[ml,api,dev]"

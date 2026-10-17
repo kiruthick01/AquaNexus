@@ -23,7 +23,6 @@ def test_data_paths_are_under_data_dir():
         settings.RAW_DIR,
         settings.PROCESSED_DIR,
         settings.MODELS_DIR,
-        settings.HECRAS_DIR,
         settings.CACHE_DIR,
     ):
         assert settings.DATA_DIR in path.parents
@@ -31,7 +30,7 @@ def test_data_paths_are_under_data_dir():
 
 def test_ensure_dirs_is_idempotent(tmp_path: Path):
     s = Settings(DATA_DIR=tmp_path, RAW_DIR=tmp_path / "raw", PROCESSED_DIR=tmp_path / "proc",
-                 MODELS_DIR=tmp_path / "models", HECRAS_DIR=tmp_path / "hecras",
+                 MODELS_DIR=tmp_path / "models",
                  CACHE_DIR=tmp_path / "cache")
     s.ensure_dirs()
     s.ensure_dirs()
@@ -52,7 +51,7 @@ def test_crs_is_jgd2011_zone_9():
 
 
 def test_logger_is_namespaced():
-    assert get_logger("hecras.reader").name == "aquanexus.hecras.reader"
+    assert get_logger("data.moe").name == "aquanexus.data.moe"
 
 
 def test_logger_does_not_duplicate_handlers():

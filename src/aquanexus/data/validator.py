@@ -1,4 +1,4 @@
-"""Data quality checks for observations, cross-sections and the merged dataset.
+"""Data quality checks for observations and the merged dataset.
 
 Every check returns :class:`Issue` records rather than raising. A dataset with
 problems is still usable - the caller decides what is disqualifying - and a
@@ -7,12 +7,6 @@ validator that stops at the first fault is useless for surveying a whole reach.
 Checks are grounded in defects actually encountered on this project, not in
 generic assertions:
 
-* A cross-section extracted through a constriction or a bridge pier reports a
-  channel far narrower than its neighbours. On the Ayase test tile RS 200 came
-  out 1.9 m wide against 10-13 m either side, and drove velocity to 2.46 m/s
-  where neighbours ran at 0.5. Nothing downstream would have flagged that.
-* HEC-RAS rejects bank stations absent from the station/elevation list, so those
-  are checked before a run rather than after a failed one.
 * Monitoring values below the detection limit are reported *as* the limit, so an
   unusually high share of censored values in a column means its numbers are
   mostly reporting artefacts.
@@ -78,101 +72,6 @@ class Report:
 
     def __str__(self) -> str:
         return "\n".join([self.summary(), *(str(i) for i in self.issues)])
-
-
-# ---------------------------------------------------------------------------
-# Cross-sections
-# ---------------------------------------------------------------------------
-
-
-def validate_sections(
-    sections,
-    width_ratio: float = 0.35,
-    min_points: int = 10,
-    max_invert_jump: float = 2.0,
-) -> Report:
-    """Check extracted cross-sections before they become HEC-RAS geometry.
-
-    ``width_ratio`` flags a section narrower than this fraction of the median
-    width of its immediate neighbours - the constriction case above.
-    ``max_invert_jump`` flags a bed elevation step larger than this between
-    adjacent sections, which usually means a section was cut at a bad angle
-    rather than that the bed really steps.
-    """
-    report = Report(checked=len(sections))
-    if not sections:
-        report.add("sections.empty", "error", "no cross-sections were extracted")
-        return report
-
-    ordered = sorted(sections, key=lambda s: s.river_station)
-
-    for xs in ordered:
-        rs = f"RS {xs.river_station:.0f}"
-
-        if xs.is_empty:
-            report.add("section.empty", "error", "no station/elevation data", rs)
-            continue
-        if len(xs.station) < min_points:
-            report.add("section.sparse", "warning",
-                       f"only {len(xs.station)} points; profile may be unreliable",
-                       rs, float(len(xs.station)))
-        if not np.all(np.diff(xs.station) > 0):
-            report.add("section.station_order", "error",
-                       "stations are not strictly increasing", rs)
-        if not np.isfinite(xs.elevation).all():
-            report.add("section.nonfinite", "error",
-                       "elevation contains NaN or inf", rs)
-
-        # Bank stations must exist in the data or HEC-RAS refuses the run.
-        from aquanexus.hecras.geometry import bank_stations
-
-        left, right = bank_stations(xs)
-        if left not in xs.station or right not in xs.station:
-            report.add("section.bank_not_in_data", "error",
-                       "bank station absent from station/elevation list", rs)
-        if left >= right:
-            report.add("section.bank_order", "error",
-                       f"left bank {left:.2f} not left of right bank {right:.2f}", rs)
-
-    # Neighbour comparisons
-    widths = np.array([xs.width for xs in ordered])
-    inverts = np.array([xs.thalweg for xs in ordered])
-
-    for i, xs in enumerate(ordered):
-        rs = f"RS {xs.river_station:.0f}"
-        neighbours = [widths[j] for j in (i - 1, i + 1) if 0 <= j < len(ordered)]
-        if neighbours and widths[i] > 0:
-            reference = float(np.median(neighbours))
-            if reference > 0 and widths[i] < width_ratio * reference:
-                report.add(
-                    "section.constriction", "warning",
-                    f"width {widths[i]:.1f} m is far below neighbours "
-                    f"(~{reference:.1f} m); likely cut through a structure "
-                    f"or constriction",
-                    rs, float(widths[i]),
-                )
-
-        if i > 0:
-            jump = abs(inverts[i] - inverts[i - 1])
-            if np.isfinite(jump) and jump > max_invert_jump:
-                report.add("section.invert_jump", "warning",
-                           f"bed steps {jump:.2f} m from the previous section",
-                           rs, float(jump))
-
-    # A reach whose bed falls in the downstream direction is the expected sign.
-    finite = np.isfinite(inverts)
-    if finite.sum() >= 2:
-        slope = np.polyfit(
-            [s.river_station for s, f in zip(ordered, finite, strict=True) if f],
-            inverts[finite], 1,
-        )[0]
-        if slope < 0:
-            report.add("reach.slope_sign", "warning",
-                       "bed rises downstream; check that river stations increase "
-                       "in the upstream direction", value=float(slope))
-
-    log.info("cross-sections: %s", report.summary())
-    return report
 
 
 # ---------------------------------------------------------------------------
