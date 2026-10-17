@@ -11,12 +11,17 @@ Feature sets, because what a model may know changes what its score means:
 ``spatial``
     ``geo`` plus what *other* stations within 25 km averaged on earlier visits. A
     prior for an unmonitored reach that has monitored neighbours.
-``nowcast``
+``nowcast_basic``
     ``spatial`` plus what those neighbours read within 10 days of the sample. Needs a
     live neighbouring network, so it is a nowcast, not a forecast.
+``nowcast``
+    ``nowcast_basic`` plus the same neighbour summaries over stations within 5 km and over
+    stations on a river of the same name within 60 km.
 ``history``
     ``geo`` plus what the same station read on earlier visits. A forecast for a
     monitored station, unavailable for a new one.
+``full_basic``
+    ``nowcast_basic`` plus ``history``.
 ``full``
     ``nowcast`` plus ``history``: everything causal, nothing measured in the sample.
 ``concurrent``
@@ -30,6 +35,7 @@ sample's own label, so none of them can leak it.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import numpy as np
@@ -59,6 +65,8 @@ GEO = ["elevation", "relief_10km", "rel_elevation"]
 HISTORY = ["prev_do", "prev_do_gap_days", "station_do_mean", "station_do_n"]
 NEIGHBOR_PRIOR = ["nb_do_prior", "nb_do_prior_n", "nb_count", "nb_dist_mean"]
 NEIGHBOR_NOW = ["nb_do_now", "nb_do_now_n"]
+NEAR = ["n5_do_prior", "n5_do_prior_n", "n5_count", "n5_do_now", "n5_do_now_n"]
+RIVER = ["rv_do_prior", "rv_do_prior_n", "rv_count", "rv_dist_mean", "rv_do_now", "rv_do_now_n"]
 CONCURRENT = ["ph", "bod", "ss"]
 
 _ENV = SEASON + LOCATION + WEATHER
@@ -66,9 +74,11 @@ FEATURE_SETS = {
     "env": _ENV,
     "geo": _ENV + GEO,
     "spatial": _ENV + GEO + NEIGHBOR_PRIOR,
-    "nowcast": _ENV + GEO + NEIGHBOR_PRIOR + NEIGHBOR_NOW,
+    "nowcast_basic": _ENV + GEO + NEIGHBOR_PRIOR + NEIGHBOR_NOW,
+    "nowcast": _ENV + GEO + NEIGHBOR_PRIOR + NEIGHBOR_NOW + NEAR + RIVER,
     "history": _ENV + GEO + HISTORY,
-    "full": _ENV + GEO + NEIGHBOR_PRIOR + NEIGHBOR_NOW + HISTORY,
+    "full_basic": _ENV + GEO + NEIGHBOR_PRIOR + NEIGHBOR_NOW + HISTORY,
+    "full": _ENV + GEO + NEIGHBOR_PRIOR + NEIGHBOR_NOW + NEAR + RIVER + HISTORY,
     "concurrent": _ENV + GEO + CONCURRENT,
 }
 
@@ -97,27 +107,18 @@ def add_history(frame: pd.DataFrame) -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
-def add_neighbors(
+def _neighbor_stats(
     frame: pd.DataFrame,
-    radius_km: float = 25.0,
-    window_days: int = 10,
-    pool: pd.Series | np.ndarray | None = None,
+    pairs: pd.DataFrame,
+    source: pd.DataFrame,
+    window_days: int,
+    prefix: str,
 ) -> pd.DataFrame:
-    """Neighbour-station features, never including the station's own readings.
+    """Neighbour summaries for every row of ``frame`` over the given station ``pairs``.
 
-    ``nb_do_prior``: mean over neighbours of each neighbour's running mean DO as of its
-    last visit strictly before the sample date. ``nb_do_now``: mean over neighbours of
-    the visit nearest in time, if within ``window_days``. ``nb_count`` is how many
-    stations lie within the radius, a density proxy that does not use any DO value.
-
-    ``pool`` optionally restricts which rows may serve as neighbour observations (a
-    boolean per row of ``frame``). Evaluation uses it to keep held-out stations' labels
-    out of every feature, including the features of training rows.
+    ``source`` supplies the neighbour observations. All reads are of other stations,
+    strictly earlier for the prior and within ``window_days`` for the nowcast.
     """
-    stations = frame.drop_duplicates("station_id")[["station_id", "latitude", "longitude"]]
-    pairs = geography.station_pairs(stations.reset_index(drop=True), radius_km)
-
-    source = frame if pool is None else frame[np.asarray(pool, dtype=bool)]
     visits = source.groupby(["station_id", "date"], as_index=False)[TARGET].mean()
     visits = visits.sort_values(["station_id", "date"])
     visits["running"] = visits.groupby("station_id")[TARGET].expanding().mean().to_numpy()
@@ -146,17 +147,77 @@ def add_neighbors(
     by_row = prior.groupby("row")
     out = pd.DataFrame(
         {
-            "nb_do_prior": by_row["running"].mean(),
-            "nb_do_prior_n": by_row["running"].count(),
-            "nb_count": by_row["neighbor_id"].nunique(),
-            "nb_dist_mean": by_row["dist_km"].mean(),
-            "nb_do_now": now.groupby("row")["nb_do"].mean(),
-            "nb_do_now_n": now.groupby("row")["nb_do"].count(),
+            f"{prefix}do_prior": by_row["running"].mean(),
+            f"{prefix}do_prior_n": by_row["running"].count(),
+            f"{prefix}count": by_row["neighbor_id"].nunique(),
+            f"{prefix}dist_mean": by_row["dist_km"].mean(),
+            f"{prefix}do_now": now.groupby("row")["nb_do"].mean(),
+            f"{prefix}do_now_n": now.groupby("row")["nb_do"].count(),
         }
     ).reindex(frame.index)
-    counts = ["nb_count", "nb_do_prior_n", "nb_do_now_n"]
+    counts = [f"{prefix}count", f"{prefix}do_prior_n", f"{prefix}do_now_n"]
     out[counts] = out[counts].fillna(0)
-    return pd.concat([frame, out], axis=1)
+    return out
+
+
+_RIVER_SUFFIX = re.compile(r"(最下流|上流|中流|下流|河口|感潮域|本川|水域)$")
+_PARENTHETICAL = re.compile(r"[（(].*?[）)]")
+
+
+def river_key(name: object) -> str:
+    """A river's name without segment marks (upstream/downstream, numbered reaches)."""
+    text = _PARENTHETICAL.sub("", str(name)).strip()
+    return _RIVER_SUFFIX.sub("", text)
+
+
+def add_neighbors(
+    frame: pd.DataFrame,
+    radius_km: float = 25.0,
+    window_days: int = 10,
+    pool: pd.Series | np.ndarray | None = None,
+    near_km: float = 5.0,
+    river_km: float = 60.0,
+) -> pd.DataFrame:
+    """Neighbour-station features, never including the station's own readings.
+
+    Three neighbourhoods, each with the same six columns under its own prefix:
+
+    * ``nb_``: stations within ``radius_km``.
+    * ``n5_``: stations within ``near_km``, which are usually the same reach.
+    * ``rv_``: stations on a river of the same name within ``river_km`` (needs a
+      ``water_body`` column), whatever their distance up to that limit.
+
+    ``X_do_prior`` is the mean over neighbours of each neighbour's running mean DO as of
+    its last visit strictly before the sample date; ``X_do_now`` is the mean of the
+    visits nearest in time within ``window_days``; ``X_count`` counts neighbouring
+    stations, a density proxy that uses no DO value.
+
+    ``pool`` optionally restricts which rows may serve as neighbour observations (a
+    boolean per row of ``frame``). Evaluation uses it to keep held-out stations' labels
+    out of every feature, including the features of training rows.
+    """
+    stations = frame.drop_duplicates("station_id")[["station_id", "latitude", "longitude"]]
+    stations = stations.reset_index(drop=True)
+    wide = geography.station_pairs(stations, max(radius_km, river_km))
+    source = frame if pool is None else frame[np.asarray(pool, dtype=bool)]
+
+    blocks = [
+        _neighbor_stats(frame, wide[wide["dist_km"] <= radius_km], source, window_days, "nb_"),
+        _neighbor_stats(frame, wide[wide["dist_km"] <= near_km], source, window_days, "n5_"),
+    ]
+    if "water_body" in frame.columns:
+        keys = frame.drop_duplicates("station_id").set_index("station_id")["water_body"]
+        keys = keys.map(river_key)
+        same = (
+            keys.reindex(wide["station_id"]).to_numpy()
+            == keys.reindex(wide["neighbor_id"]).to_numpy()
+        )
+        blocks.append(
+            _neighbor_stats(
+                frame, wide[same & (wide["dist_km"] <= river_km)], source, window_days, "rv_"
+            )
+        )
+    return pd.concat([frame, *blocks], axis=1)
 
 
 def build_frame(

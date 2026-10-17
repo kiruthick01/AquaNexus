@@ -77,8 +77,9 @@ async def timing_and_errors(request: Request, call_next):
         response = await call_next(request)
     except Exception:  # noqa: BLE001 - deliberate catch-all at the boundary
         elapsed = (time.perf_counter() - started) * 1000
-        log.exception("unhandled error on %s %s after %.0f ms",
-                      request.method, request.url.path, elapsed)
+        log.exception(
+            "unhandled error on %s %s after %.0f ms", request.method, request.url.path, elapsed
+        )
         return JSONResponse(
             status_code=500,
             content={"detail": "internal error", "path": request.url.path},
@@ -86,8 +87,9 @@ async def timing_and_errors(request: Request, call_next):
 
     elapsed = (time.perf_counter() - started) * 1000
     response.headers["X-Response-Time-ms"] = f"{elapsed:.1f}"
-    log.debug("%s %s -> %d in %.1f ms", request.method, request.url.path,
-              response.status_code, elapsed)
+    log.debug(
+        "%s %s -> %d in %.1f ms", request.method, request.url.path, response.status_code, elapsed
+    )
     return response
 
 

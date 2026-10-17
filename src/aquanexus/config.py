@@ -40,8 +40,10 @@ class Settings(BaseSettings):
     # and http://localhost:3000 as different origins, and a request from the
     # unlisted one fails as an unexplained "cannot reach the API".
     CORS_ORIGINS: list[str] = [
-        "http://localhost:3000", "http://127.0.0.1:3000",
-        "http://localhost:5173", "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
     ]
 
     # --- Logging ---
@@ -64,9 +66,12 @@ class Settings(BaseSettings):
         """
         if "DATA_DIR" not in self.model_fields_set:
             return self
-        for name, child in (("RAW_DIR", "raw"), ("PROCESSED_DIR", "processed"),
-                            ("MODELS_DIR", "models"),
-                            ("CACHE_DIR", "cache")):
+        for name, child in (
+            ("RAW_DIR", "raw"),
+            ("PROCESSED_DIR", "processed"),
+            ("MODELS_DIR", "models"),
+            ("CACHE_DIR", "cache"),
+        ):
             if name not in self.model_fields_set:
                 object.__setattr__(self, name, self.DATA_DIR / child)
         return self

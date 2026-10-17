@@ -40,6 +40,7 @@ def list_models() -> list[ModelInfo]:
                 low_do_weight=meta.get("low_do_weight", 1.0),
                 trained_on=meta.get("trained_on", {}),
                 held_out_strict=meta.get("held_out_strict", {}),
+                held_out_classifier=meta.get("held_out_strict_classifier", {}),
                 held_out_note=meta.get("held_out_note", ""),
                 importance=meta.get("importance", {}),
                 interval_half_widths=bundle.bin_widths,

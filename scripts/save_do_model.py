@@ -61,6 +61,23 @@ def strict_results(results: Path, feature_set: str, weight: float) -> dict:
     return {k: round(float(row.iloc[0][k]), 4) for k in keep if k in row}
 
 
+def classifier_results(results: Path, feature_set: str) -> dict:
+    """Held-out strict-regime ranking and calibration of the low-DO classifier.
+
+    The raw LightGBM probability is served: it was already well calibrated on unseen
+    stations, and an isotonic recalibration fitted on calibration stations made it worse.
+    """
+    path = results / "do_tail_ranking.csv"
+    if not path.exists():
+        return {}
+    table = pd.read_csv(path)
+    row = table[(table["features"] == feature_set) & (table["scorer"] == "classifier")]
+    if row.empty:
+        return {}
+    keep = ["auc", "avg_precision", "recall_at_p50", "base_rate", "brier", "ece"]
+    return {k: round(float(row.iloc[0][k]), 4) for k in keep if k in row}
+
+
 def station_table(frame: pd.DataFrame, raw: Path) -> pd.DataFrame:
     """One row per station: identity, terrain and where its history stands.
 
@@ -117,6 +134,7 @@ def main() -> None:
             pred_contrib=True,
         )[:, :-1]
         importance = dict(zip(cols, np.abs(contrib).mean(axis=0).round(4).tolist(), strict=True))
+        classifier = ex.fit_low_do_classifier(fit, cols)
         meta = {
             "name": name,
             "feature_set": feature_set,
@@ -131,12 +149,13 @@ def main() -> None:
             },
             "held_out_strict": strict_results(args.results, feature_set, weight),
             "held_out_note": "Trained FY<=2019, scored on unseen stations in FY2021-22.",
+            "held_out_strict_classifier": classifier_results(args.results, feature_set),
             "training_ranges": feature_ranges(fit, cols),
             "importance": dict(sorted(importance.items(), key=lambda kv: -kv[1])),
             "built": date.today().isoformat(),
             "commit": commit(),
         }
-        bundle = DOBundle(booster, cols, list(BINS), widths, args.level, meta)
+        bundle = DOBundle(booster, cols, list(BINS), widths, args.level, meta, classifier)
         bundle.save(args.out / name)
         log.info("%s: %d rounds, interval half-widths %s", name, booster.best_iteration,
                  np.round(widths, 2).tolist())  # fmt: skip

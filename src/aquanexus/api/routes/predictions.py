@@ -50,6 +50,7 @@ def _predict(request: PredictionRequest) -> PredictionResponse:
     return PredictionResponse(
         mode=request.mode,
         prediction=prediction,
+        probability_below_5=float(out["p_low"]) if "p_low" in out else None,
         lower=float(out["lower"]),
         upper=float(out["upper"]),
         level=bundle.level,

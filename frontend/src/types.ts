@@ -27,6 +27,14 @@ export interface ModelInfo {
   low_do_weight: number;
   trained_on: { rows?: number; stations?: number; source?: string; rounds?: number };
   held_out_strict: HeldOut;
+  held_out_classifier: Partial<{
+    auc: number;
+    avg_precision: number;
+    recall_at_p50: number;
+    base_rate: number;
+    brier: number;
+    ece: number;
+  }>;
   held_out_note: string;
   importance: Record<string, number>;
   interval_half_widths: number[];
@@ -85,6 +93,7 @@ export interface PredictionResponse {
   prediction: number;
   lower: number;
   upper: number;
+  probability_below_5: number | null;
   level: number;
   interpretation: string;
   missing_features: string[];

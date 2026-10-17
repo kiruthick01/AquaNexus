@@ -52,6 +52,7 @@ describe("predict page", () => {
     expect(await screen.findByText("6.11")).toBeInTheDocument();
     expect(screen.getByText(/3\.91 to 8\.32 mg\/L/)).toBeInTheDocument();
     expect(screen.getByText(/rain_1d/)).toBeInTheDocument();
+    expect(screen.getByText("7%")).toBeInTheDocument();
 
     const sent = calls.find((c) => c.url.endsWith("/predict"))!;
     const body = JSON.parse(String(sent.init?.body));

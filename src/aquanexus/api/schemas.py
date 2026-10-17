@@ -106,6 +106,9 @@ class PredictionResponse(BaseModel):
     lower: float
     upper: float
     level: float = Field(description="Nominal coverage of [lower, upper]")
+    probability_below_5: float | None = Field(
+        None, description="Calibrated probability that DO is below 5 mg/L, when the model has one"
+    )
     interpretation: str
     missing_features: list[str]
     out_of_range: list[RangeWarning] = Field(default_factory=list)
@@ -130,6 +133,9 @@ class ModelInfo(BaseModel):
     low_do_weight: float
     trained_on: dict
     held_out_strict: dict = Field(description="Scored on unseen stations in later years")
+    held_out_classifier: dict = Field(
+        default_factory=dict, description="Ranking and calibration of the below-5 probability"
+    )
     held_out_note: str
     importance: dict[str, float] = Field(description="Mean |contribution|, mg/L")
     interval_half_widths: list[float]

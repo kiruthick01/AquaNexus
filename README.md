@@ -23,25 +23,33 @@ Scored on stations **unseen in training**, in fiscal years 2021-22 (training use
 | climatology (baseline) | station history | 0.38 | 1.17 mg/L | n/a | n/a |
 | persistence (baseline) | station history | 0.36 | 1.19 mg/L | n/a | n/a |
 | `geo` | coordinates, date, weather | 0.48 | 1.02 mg/L | 20% | 37% |
-| `nowcast` | plus neighbouring stations' recent readings | 0.51 | 0.99 mg/L | 19% | 36% |
-| `full` | plus the station's own earlier readings | **0.72** | **0.75 mg/L** | 57% | 43% |
-| `full_alert` | `full`, weighted toward low oxygen | 0.69 | 0.79 mg/L | 77% | 26% |
+| `nowcast` | plus neighbouring stations and same-river stations' recent readings | 0.55 | 0.93 mg/L | 26% | 33% |
+| `full` | plus the station's own earlier readings | **0.73** | **0.72 mg/L** | 57% | 43% |
+| `full_alert` | `full`, weighted toward low oxygen | 0.70 | 0.77 mg/L | 74% | 27% |
+
+Each model also returns a **probability that DO is below 5 mg/L** from a dedicated classifier
+(AUC 0.88 / 0.90 / 0.97 for `geo` / `nowcast` / `full`, against 0.83 / 0.86 / 0.95 from thresholding
+the regression; the base rate is 1.7%, and the probabilities are well calibrated, expected
+calibration error 0.001-0.004).
 
 What the numbers say, without rounding in our favour:
 
 - The models beat naive baselines on stations they have never seen. Station history is the
   largest single gain (about +0.2 R²), but it needs earlier readings from the same station.
 - A brand-new station with only weather and terrain explains about half the variance.
-- **Low oxygen is the hard part.** Only 2.2% of samples are below 5 mg/L. Without tail
-  weighting the models catch under a fifth of them (for `geo`) and with it they trade
-  precision for recall. Conformal intervals cover about 88% of cases overall but only
-  45-56% of samples below 5 mg/L.
-- Hyperparameter tuning (Optuna, 30 trials, station-grouped CV) moved held-out R² by less than
-  0.01 on unseen stations, so the served models use defaults.
-- Accuracy by region, season and DO band is in `experiments/do_breakdown.csv`. Summer is the
-  hardest season (R² 0.52 for `full`) and Chugoku and Kyushu the hardest regions (0.61).
-- On the Ayase (綾瀬川) and Naka (中川), held out entirely, `full` scores R² 0.73 and 0.65;
-  `geo` scores 0.51 and 0.34 (`experiments/do_case_studies.csv`; small samples, so noisy).
+  Adding what neighbouring and same-river stations read recently lifts that to 0.55.
+- **Low oxygen is the hard part.** Only 1.7% of strict-test samples are below 5 mg/L.
+  Without tail weighting `geo` catches a fifth of them. Weighting trades precision for
+  recall. Intervals cover about 89% of cases overall but only 35-57% of samples below
+  5 mg/L (`geo` to `full`); conformalized quantile regression barely helps (up to 58%).
+- Hyperparameter tuning (Optuna, 30 trials, station-grouped CV) moved held-out R² by 0.004 or less
+  on unseen stations, so the served models use defaults.
+- Summer is the hardest season (`full` R² 0.54) and Kyushu-Okinawa and Chugoku the hardest regions
+  (0.63, 0.64). Every region and season beats climatology. See `experiments/do_breakdown.csv`.
+- On the Ayase (綾瀬川) and Naka (中川), held out entirely: `geo` R² 0.51 and 0.34, `nowcast` 0.63
+  and 0.41, `full` 0.76 and 0.65 (small samples, so noisy; `experiments/do_case_studies.csv`).
+- Neighbour features were checked for leakage from held-out stations' labels: excluding them
+  changed R² by at most 0.011 (`experiments/do_neighbor_leak_check.csv`).
 
 All result tables are CSVs in `experiments/`; `docs/RESULTS.md` explains each.
 

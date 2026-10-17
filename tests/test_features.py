@@ -146,3 +146,23 @@ def test_a_restricted_pool_keeps_excluded_stations_out_of_every_neighbour_featur
     assert near["nb_do_prior"].isna().all()
     assert near["nb_do_now"].isna().all()
     assert (near["nb_count"] == 1).all()  # density still counts the excluded station
+
+
+def test_river_key_drops_segment_marks():
+    assert features.river_key("綾瀬川上流") == "綾瀬川"
+    assert features.river_key("綾瀬川（２）") == "綾瀬川"
+    assert features.river_key("荒川") == "荒川"
+
+
+def test_river_neighbours_need_the_same_river_name_not_just_proximity():
+    net = _network()
+    net.loc[net["station_id"] == 1, "water_body"] = "甲川"
+    net.loc[net["station_id"] == 2, "water_body"] = "乙川"
+    net.loc[net["station_id"] == 3, "water_body"] = "甲川"
+    out = features.add_neighbors(net)
+    s1 = out[out["station_id"] == 1]
+    assert (s1["nb_count"] == 1).all()  # station 2 is close but a different river
+    assert (s1["rv_count"] == 0).all()
+    net.loc[net["station_id"] == 2, "water_body"] = "甲川（２）"
+    same = features.add_neighbors(net)
+    assert (same[same["station_id"] == 1]["rv_count"] == 1).all()

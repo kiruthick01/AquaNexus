@@ -35,6 +35,13 @@ def _toy_bundle(mode: str) -> DOBundle:
         ex.lgb.Dataset(frame, y),
         num_boost_round=30,
     )
+    classifier = None
+    if mode == "geo":
+        classifier = ex.lgb.train(
+            {**ex.DEFAULT_PARAMS, "objective": "binary", "num_leaves": 7, "min_child_samples": 5},
+            ex.lgb.Dataset(frame, (y < 5).astype(int)),
+            num_boost_round=30,
+        )
     meta = {
         "low_do_weight": 1.0,
         "trained_on": {"rows": 600},
@@ -45,7 +52,16 @@ def _toy_bundle(mode: str) -> DOBundle:
         "built": "2026-01-01",
         "commit": "test",
     }
-    return DOBundle(booster, cols, [6.0, 9.0], [1.5, 1.0, 0.8], 0.9, meta)
+    return DOBundle(
+        booster,
+        cols,
+        [6.0, 9.0],
+        [1.5, 1.0, 0.8],
+        0.9,
+        meta,
+        classifier,
+        {"x": [0.0, 1.0], "y": [0.0, 1.0]} if classifier else None,
+    )
 
 
 @pytest.fixture
@@ -101,6 +117,16 @@ def test_prediction_has_an_interval_that_brackets_it(client):
     assert body["lower"] < body["prediction"] < body["upper"]
     assert body["level"] == 0.9
     assert body["caveats"]
+
+
+def test_a_bundle_with_a_classifier_reports_a_low_oxygen_probability(client):
+    hot = client.post("/predict", json=request(weather={"air_temp": 29.0})).json()
+    cool = client.post("/predict", json=request(weather={"air_temp": 2.0})).json()
+    assert 0 <= cool["probability_below_5"] <= hot["probability_below_5"] <= 1
+    full = client.post(
+        "/predict", json={"date": "2023-07-10", "station_id": 1001, "mode": "full"}
+    ).json()
+    assert full["probability_below_5"] is None
 
 
 def test_warmer_air_predicts_lower_oxygen(client):

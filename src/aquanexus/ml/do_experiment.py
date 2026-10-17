@@ -52,11 +52,16 @@ class Split:
             raise ValueError(f"split {self.name!r}: train and test overlap")
 
 
+def held_out_stations(station_ids, seed: int = 0, station_frac: float = 0.2) -> set:
+    """The stations the ``station`` and ``strict`` regimes never train on."""
+    rng = np.random.default_rng(seed)
+    stations = np.sort(pd.unique(np.asarray(station_ids)))
+    return set(rng.choice(stations, size=int(len(stations) * station_frac), replace=False))
+
+
 def make_splits(frame: pd.DataFrame, seed: int = 0, station_frac: float = 0.2) -> list[Split]:
     """The three single-shot regimes. Prefecture folds come from :func:`prefecture_folds`."""
-    rng = np.random.default_rng(seed)
-    stations = np.sort(frame["station_id"].unique())
-    held = set(rng.choice(stations, size=int(len(stations) * station_frac), replace=False))
+    held = held_out_stations(frame["station_id"], seed, station_frac)
     is_held = frame["station_id"].isin(held).to_numpy()
     early = (frame["fiscal_year"] <= TRAIN_LAST_FY).to_numpy()
     late = (frame["fiscal_year"] >= TEST_FIRST_FY).to_numpy()
@@ -305,3 +310,121 @@ def binned_conformal_interval(
 def coverage(y: np.ndarray, lower: np.ndarray, upper: np.ndarray) -> dict[str, float]:
     inside = (y >= lower) & (y <= upper)
     return {"coverage": float(inside.mean()), "mean_width": float((upper - lower).mean())}
+
+
+# --- quantile intervals and a low-oxygen classifier --------------------------------
+
+
+def fit_quantile(
+    train: pd.DataFrame,
+    features: list[str],
+    alpha: float,
+    params: dict | None = None,
+    max_rounds: int = 2000,
+) -> lgb.Booster:
+    """LightGBM quantile regression, early-stopped on held-out stations."""
+    fit, val = _carve_validation(train)
+    merged = {**DEFAULT_PARAMS, **(params or {}), "objective": "quantile", "alpha": alpha}
+    d_fit = lgb.Dataset(fit[features], fit[TARGET])
+    d_val = lgb.Dataset(val[features], val[TARGET], reference=d_fit)
+    return lgb.train(
+        merged,
+        d_fit,
+        num_boost_round=max_rounds,
+        valid_sets=[d_val],
+        callbacks=[lgb.early_stopping(100, verbose=False)],
+    )
+
+
+def cqr_interval(
+    lower_model: lgb.Booster,
+    upper_model: lgb.Booster,
+    calibration: pd.DataFrame,
+    test: pd.DataFrame,
+    features: list[str],
+    level: float = 0.9,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Conformalized quantile regression (Romano et al. 2019).
+
+    The quantile models give an interval that already widens where the model is
+    unsure; the conformal step then shifts both ends by the amount that makes the
+    calibration stations reach ``level`` coverage. Marginal coverage keeps the same
+    finite-sample guarantee as split conformal, but the width is adaptive.
+    """
+    y = calibration[TARGET].to_numpy()
+    lo_c = predict_lgbm(lower_model, calibration, features)
+    hi_c = predict_lgbm(upper_model, calibration, features)
+    score = np.maximum(lo_c - y, y - hi_c)
+    q = conformal_quantile(score, level)
+    return (
+        predict_lgbm(lower_model, test, features) - q,
+        predict_lgbm(upper_model, test, features) + q,
+    )
+
+
+def fit_low_do_classifier(
+    train: pd.DataFrame,
+    features: list[str],
+    params: dict | None = None,
+    max_rounds: int = 2000,
+) -> lgb.Booster:
+    """Probability that DO is below 5 mg/L, early-stopped on held-out stations."""
+    fit, val = _carve_validation(train)
+    merged = {**DEFAULT_PARAMS, **(params or {}), "objective": "binary", "metric": "binary_logloss"}
+    d_fit = lgb.Dataset(fit[features], (fit[TARGET] < LOW_DO).astype(int))
+    d_val = lgb.Dataset(val[features], (val[TARGET] < LOW_DO).astype(int), reference=d_fit)
+    return lgb.train(
+        merged,
+        d_fit,
+        num_boost_round=max_rounds,
+        valid_sets=[d_val],
+        callbacks=[lgb.early_stopping(100, verbose=False)],
+    )
+
+
+def ranking_metrics(y: np.ndarray, score: np.ndarray) -> dict[str, float]:
+    """How well ``score`` (higher = more likely low DO) ranks samples below 5 mg/L.
+
+    ``recall_at_p50`` is the share of low-DO samples caught at the loosest threshold that
+    still keeps at least half of the alarms correct; it answers "how many events can we
+    find without crying wolf more than once in two".
+    """
+    from sklearn.metrics import average_precision_score, precision_recall_curve, roc_auc_score
+
+    low = (np.asarray(y) < LOW_DO).astype(int)
+    if low.sum() == 0 or low.sum() == len(low):
+        return {"auc": float("nan"), "avg_precision": float("nan"), "recall_at_p50": float("nan")}
+    precision, recall, _ = precision_recall_curve(low, score)
+    ok = precision >= 0.5
+    return {
+        "auc": float(roc_auc_score(low, score)),
+        "avg_precision": float(average_precision_score(low, score)),
+        "recall_at_p50": float(recall[ok].max()) if ok.any() else 0.0,
+        "base_rate": float(low.mean()),
+    }
+
+
+def isotonic_map(probability: np.ndarray, y: np.ndarray) -> dict[str, list[float]]:
+    """Monotone recalibration of a low-DO probability, as interpolation points.
+
+    Fitted on calibration stations the classifier never saw; applied with ``np.interp``.
+    """
+    from sklearn.isotonic import IsotonicRegression
+
+    low = (np.asarray(y) < LOW_DO).astype(float)
+    iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0).fit(probability, low)
+    return {"x": iso.X_thresholds_.tolist(), "y": iso.y_thresholds_.tolist()}
+
+
+def calibration_report(probability: np.ndarray, y: np.ndarray, bins: int = 10) -> dict[str, float]:
+    """Brier score and expected calibration error of a low-DO probability."""
+    low = (np.asarray(y) < LOW_DO).astype(float)
+    p = np.asarray(probability)
+    edges = np.quantile(p, np.linspace(0, 1, bins + 1))
+    index = np.clip(np.searchsorted(edges, p, side="right") - 1, 0, bins - 1)
+    ece = sum(
+        (index == b).mean() * abs(p[index == b].mean() - low[index == b].mean())
+        for b in range(bins)
+        if (index == b).any()
+    )
+    return {"brier": float(np.mean((p - low) ** 2)), "ece": float(ece)}

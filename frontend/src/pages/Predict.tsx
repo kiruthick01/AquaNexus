@@ -215,6 +215,12 @@ export default function Predict({ models }: { models: ModelState }) {
                   {result.lower.toFixed(2)} to {result.upper.toFixed(2)} mg/L
                 </strong>
               </p>
+              {result.probability_below_5 !== null && (
+                <p>
+                  Chance DO is below 5 mg/L:{" "}
+                  <strong>{(result.probability_below_5 * 100).toFixed(0)}%</strong>
+                </p>
+              )}
               {result.notes.map((note) => (
                 <div className="banner" key={note}>
                   {note}

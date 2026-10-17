@@ -33,15 +33,22 @@ Seven feature sets from weather-only to weather plus neighbours plus the station
 
 ### Results
 
-See `README.md` and `docs/RESULTS.md`. In short: strict-regime R² 0.48 (`geo`), 0.51 (`nowcast`),
-0.72 (`full`) against 0.38 for the best baseline.
+See `README.md` and `docs/RESULTS.md`. In short: strict-regime R² 0.48 (`geo`), 0.55 (`nowcast`),
+0.73 (`full`) against 0.38 for the best baseline.
 
 What did and did not work:
 
 - Station identity is worth about 0.25 R². Weather alone loses to climatology at stations the
   climatology has seen, and beats it at stations it has not.
 - Elevation and relief added about 0.06-0.07 R² for weather-only models.
-- Neighbour-station features added little (at most 0.05 R²) and hurt on the Ayase.
+- Neighbour features from stations within 25 km added little (at most 0.05 R²) and hurt on the Ayase.
+- Adding neighbours within 5 km and stations on a same-named river within 60 km (matched on
+  the river name with segment marks stripped) lifted `nowcast` from 0.516 to 0.549 and `full`
+  from 0.715 to 0.728 on the strict regime, and `nowcast` on the Ayase from 0.33 to 0.63. On the
+  temporal regime `nowcast` moved the other way (0.632 to 0.612), so the gain is not uniform.
+- A dedicated below-5 classifier ranks low-oxygen samples better than thresholding the regression
+  (AUC 0.88/0.90/0.97 against 0.83/0.86/0.95) and its raw probabilities are well calibrated.
+  Isotonic recalibration hurt, so it is not used.
 - Tuning moved held-out R² by less than 0.01 on unseen stations. Defaults are served.
 - Tail weighting (weights 3, 10, 30) raises recall of DO below 5 mg/L at a steep cost in
   precision; weight 10 is served as `full_alert`.

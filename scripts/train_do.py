@@ -20,6 +20,7 @@ from pathlib import Path
 import pandas as pd
 
 from aquanexus.data import features as feat
+from aquanexus.data import moe
 from aquanexus.logger import get_logger
 from aquanexus.ml import do_experiment as ex
 
@@ -39,9 +40,18 @@ def slim(frame: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
 
 
 def load_frame(raw: Path, weather: Path, elevation: Path, cache: Path, rebuild: bool):
+    """Build (or load) the feature frame, keeping held-out stations out of neighbour pools.
+
+    Excluding the stations that the ``station`` and ``strict`` regimes never train on
+    means no training row's features contain a test station's reading.
+    """
     if cache.exists() and not rebuild:
         return pd.read_parquet(cache)
-    frame = feat.build_frame(raw, weather, elevation)
+    data = moe.build_dataset(
+        moe.load_samples(moe.find_files(raw, "mk")), moe.load_stations(moe.find_files(raw, "mm"))
+    )
+    held = ex.held_out_stations(data["station_id"])
+    frame = feat.build_frame(raw, weather, elevation, exclude_from_neighbors=held)
     cache.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(cache)
     return frame

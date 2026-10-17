@@ -135,3 +135,51 @@ def test_do_bundle_round_trips_and_returns_ordered_intervals(tmp_path):
     assert (out["lower"] < out["prediction"]).all() and (out["prediction"] < out["upper"]).all()
     with pytest.raises(KeyError):
         loaded.predict(frame[["a"]])
+
+
+def _toy_frame(n=3000, seed=0):
+    rng = np.random.default_rng(seed)
+    x = rng.uniform(0, 1, n)
+    y = 4 + 8 * x + rng.normal(0, 0.5 + 1.5 * (1 - x), n)  # noisier when x is small
+    return pd.DataFrame({"x": x, "dissolved_oxygen": y, "station_id": rng.integers(0, 60, n)})
+
+
+def test_cqr_reaches_nominal_coverage_and_is_wider_where_noise_is_larger():
+    frame = _toy_frame()
+    train, cal, test = frame.iloc[:1500], frame.iloc[1500:2200], frame.iloc[2200:]
+    lo = ex.fit_quantile(train, ["x"], 0.05)
+    hi = ex.fit_quantile(train, ["x"], 0.95)
+    lower, upper = ex.cqr_interval(lo, hi, cal, test, ["x"], level=0.9)
+    cover = ex.coverage(test["dissolved_oxygen"].to_numpy(), lower, upper)
+    assert cover["coverage"] == pytest.approx(0.9, abs=0.05)
+    width = upper - lower
+    assert width[test["x"].to_numpy() < 0.2].mean() > width[test["x"].to_numpy() > 0.8].mean()
+
+
+def test_ranking_metrics_separate_a_good_score_from_a_random_one():
+    rng = np.random.default_rng(0)
+    y = np.where(rng.uniform(size=2000) < 0.2, 3.0, 8.0)
+    good = ex.ranking_metrics(y, -y + rng.normal(0, 1.0, len(y)))
+    random = ex.ranking_metrics(y, rng.normal(size=len(y)))
+    assert good["auc"] > 0.9 and abs(random["auc"] - 0.5) < 0.08
+    assert good["avg_precision"] > random["avg_precision"] + 0.3
+
+
+def test_low_do_classifier_outputs_probabilities():
+    frame = _toy_frame()
+    model = ex.fit_low_do_classifier(frame, ["x"])
+    prob = model.predict(frame[["x"]], num_iteration=model.best_iteration)
+    assert ((prob >= 0) & (prob <= 1)).all()
+    assert prob[frame["x"] < 0.1].mean() > prob[frame["x"] > 0.9].mean()
+
+
+def test_isotonic_map_repairs_an_overconfident_probability():
+    rng = np.random.default_rng(0)
+    truth = rng.uniform(size=4000) < 0.2
+    y = np.where(truth, 3.0, 8.0)
+    overconfident = np.clip(0.2 + (truth - 0.2) * 0.9 * rng.uniform(0.3, 1.0, 4000), 0, 1)
+    shifted = np.clip(overconfident * 1.0 + 0.3, 0, 1)  # systematically too high
+    mapping = ex.isotonic_map(shifted, y)
+    fixed = np.interp(shifted, mapping["x"], mapping["y"])
+    assert ex.calibration_report(fixed, y)["ece"] < ex.calibration_report(shifted, y)["ece"]
+    assert (np.diff(mapping["y"]) >= 0).all()

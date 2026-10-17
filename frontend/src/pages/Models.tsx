@@ -69,6 +69,14 @@ export default function Models({ models }: { models: ModelState }) {
               </div>
             </div>
           </div>
+          {model.held_out_classifier.auc !== undefined && (
+            <p className="small">
+              Chance of DO below 5 mg/L: ranking AUC {fmt(model.held_out_classifier.auc)}, average
+              precision {fmt(model.held_out_classifier.avg_precision)} against a base rate of{" "}
+              {fmt((model.held_out_classifier.base_rate ?? 0) * 100, 1)}%; calibration error{" "}
+              {fmt(model.held_out_classifier.ece, 3)}.
+            </p>
+          )}
           <h3>What it relies on (mean absolute contribution, mg/L)</h3>
           <TopFeatures model={model} />
           <p className="small muted">
