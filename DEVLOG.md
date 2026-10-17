@@ -52,7 +52,7 @@ What did and did not work:
 - Tuning moved held-out R² by less than 0.01 on unseen stations. Defaults are served.
 - Tail weighting (weights 3, 10, 30) raises recall of DO below 5 mg/L at a steep cost in
   precision; weight 10 is served as `full_alert`.
-- Interval coverage: about 0.88 at 0.90 nominal overall, 0.45-0.56 for samples below 5 mg/L.
+- Interval coverage: about 0.89 at 0.90 nominal overall, 0.35-0.57 for samples below 5 mg/L (`geo` to `full`).
 
 ### Integrity check: neighbour features and held-out stations
 
