@@ -162,16 +162,33 @@ def _carve_validation(train: pd.DataFrame, frac: float = 0.1, seed: int = 0):
     return train[~mask], train[mask]
 
 
+LOW_DO = 5.0
+
+
+def tail_weights(target: pd.Series, weight: float) -> np.ndarray:
+    """Sample weights: ``weight`` for samples below the 5 mg/L stress threshold, 1 elsewhere."""
+    return np.where(target.to_numpy() < LOW_DO, weight, 1.0)
+
+
 def fit_lgbm(
     train: pd.DataFrame,
     features: list[str],
     params: dict | None = None,
     max_rounds: int = 3000,
+    tail_weight: float = 1.0,
 ) -> lgb.Booster:
+    """Fit with early stopping on held-out stations.
+
+    ``tail_weight`` > 1 up-weights low-DO samples in both the training loss and the
+    validation score, trading some overall accuracy for better detection of the
+    fish-stress regime. Evaluation metrics elsewhere are never weighted.
+    """
     fit, val = _carve_validation(train)
     merged = {**DEFAULT_PARAMS, **(params or {})}
-    d_fit = lgb.Dataset(fit[features], fit[TARGET])
-    d_val = lgb.Dataset(val[features], val[TARGET], reference=d_fit)
+    d_fit = lgb.Dataset(fit[features], fit[TARGET], weight=tail_weights(fit[TARGET], tail_weight))
+    d_val = lgb.Dataset(
+        val[features], val[TARGET], weight=tail_weights(val[TARGET], tail_weight), reference=d_fit
+    )
     return lgb.train(
         merged,
         d_fit,
@@ -251,3 +268,40 @@ def conformal_interval(
     q = np.quantile(resid, min(1.0, np.ceil((len(resid) + 1) * level) / len(resid)))
     pred = predict_lgbm(model, test, features)
     return pred - q, pred + q
+
+
+def _conformal_quantile(resid: np.ndarray, level: float) -> float:
+    return float(np.quantile(resid, min(1.0, np.ceil((len(resid) + 1) * level) / len(resid))))
+
+
+def binned_conformal_interval(
+    calibration_pred: np.ndarray,
+    calibration_y: np.ndarray,
+    test_pred: np.ndarray,
+    edges: tuple[float, ...] = (6.0, 9.0),
+    level: float = 0.9,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Split-conformal interval with one residual quantile per predicted-DO bin.
+
+    Errors are larger when the predicted DO is low, so a single width over-covers the
+    easy cases and under-covers the stressed ones. Binning on the *prediction* (known
+    at inference) keeps the finite-sample guarantee within each bin.
+    """
+    resid = np.abs(calibration_y - calibration_pred)
+    cal_bin = np.digitize(calibration_pred, edges)
+    test_bin = np.digitize(test_pred, edges)
+    widths = np.array(
+        [
+            _conformal_quantile(resid[cal_bin == b], level)
+            if (cal_bin == b).sum() > 1 / (1 - level)
+            else _conformal_quantile(resid, level)
+            for b in range(len(edges) + 1)
+        ]
+    )
+    q = widths[test_bin]
+    return test_pred - q, test_pred + q
+
+
+def coverage(y: np.ndarray, lower: np.ndarray, upper: np.ndarray) -> dict[str, float]:
+    inside = (y >= lower) & (y <= upper)
+    return {"coverage": float(inside.mean()), "mean_width": float((upper - lower).mean())}

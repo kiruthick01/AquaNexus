@@ -47,7 +47,7 @@ def load_frame(raw: Path, weather: Path, elevation: Path, cache: Path, rebuild: 
     return frame
 
 
-def evaluate_regime(frame, split, sets, trials, rows):
+def evaluate_regime(frame, split, sets, trials, rows, tail=()):
     train, test = frame[split.train], frame[split.test]
     log.info("%s: train %d rows, test %d rows", split.name, len(train), len(test))
 
@@ -67,6 +67,10 @@ def evaluate_regime(frame, split, sets, trials, rows):
         booster = ex.fit_lgbm(train, cols)
         record("lgbm_default", name, ex.predict_lgbm(booster, test, cols),
                {"rounds": booster.best_iteration})  # fmt: skip
+        for weight in tail:
+            booster = ex.fit_lgbm(train, cols, tail_weight=weight)
+            record(f"lgbm_tail{weight:g}", name, ex.predict_lgbm(booster, test, cols),
+                   {"rounds": booster.best_iteration})  # fmt: skip
         if trials:
             tuned = ex.tune_lgbm(train, cols, n_trials=trials)
             booster = ex.fit_lgbm(train, cols, tuned["params"])
@@ -105,6 +109,7 @@ def main() -> None:
     parser.add_argument("--sets", nargs="*", default=None, help="subset of feature sets")
     parser.add_argument("--out", type=Path, default=Path("experiments/do_results.csv"))
     parser.add_argument("--trials", type=int, default=0, help="Optuna trials per regime; 0 skips")
+    parser.add_argument("--tail", type=float, nargs="*", default=(), help="low-DO sample weights")
     parser.add_argument("--rebuild", action="store_true")
     parser.add_argument("--regimes", nargs="*", default=None, help="subset of regime names")
     parser.add_argument("--no-prefecture", action="store_true")
@@ -121,7 +126,7 @@ def main() -> None:
     for split in ex.make_splits(frame):
         if args.regimes and split.name not in args.regimes:
             continue
-        evaluate_regime(frame, split, sets, args.trials, rows)
+        evaluate_regime(frame, split, sets, args.trials, rows, args.tail)
         save(rows, args.out)
         gc.collect()
     if not args.no_prefecture and (not args.regimes or "prefecture" in args.regimes):

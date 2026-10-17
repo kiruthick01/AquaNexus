@@ -88,3 +88,29 @@ def test_metrics_on_a_perfect_and_a_biased_prediction():
 def test_metrics_ignore_missing_predictions():
     out = ex.metrics(np.array([1.0, 2.0, 3.0]), np.array([1.0, np.nan, 3.0]))
     assert out["n"] == 2
+
+
+def test_tail_weights_upweight_only_samples_below_the_stress_threshold():
+    target = pd.Series([2.0, 4.99, 5.0, 9.0])
+    assert ex.tail_weights(target, 10.0).tolist() == [10.0, 10.0, 1.0, 1.0]
+
+
+def test_binned_conformal_is_wider_where_calibration_errors_are_larger():
+    rng = np.random.default_rng(0)
+    pred = np.concatenate([np.full(500, 4.0), np.full(500, 10.0)])
+    noise = np.concatenate([rng.normal(0, 2.0, 500), rng.normal(0, 0.3, 500)])
+    lo, hi = ex.binned_conformal_interval(pred, pred + noise, np.array([4.0, 10.0]))
+    assert (hi - lo)[0] > 3 * (hi - lo)[1]
+
+
+def test_binned_conformal_covers_near_nominal_on_fresh_data():
+    rng = np.random.default_rng(1)
+
+    def draw(n):
+        pred = rng.uniform(2, 12, n)
+        return pred, pred + rng.normal(0, 0.2 + 0.2 * (12 - pred))
+
+    cal_pred, cal_y = draw(6000)
+    pred, y = draw(6000)
+    lo, hi = ex.binned_conformal_interval(cal_pred, cal_y, pred, level=0.9)
+    assert ex.coverage(y, lo, hi)["coverage"] == pytest.approx(0.9, abs=0.03)
