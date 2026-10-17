@@ -270,7 +270,7 @@ def conformal_interval(
     return pred - q, pred + q
 
 
-def _conformal_quantile(resid: np.ndarray, level: float) -> float:
+def conformal_quantile(resid: np.ndarray, level: float) -> float:
     return float(np.quantile(resid, min(1.0, np.ceil((len(resid) + 1) * level) / len(resid))))
 
 
@@ -292,9 +292,9 @@ def binned_conformal_interval(
     test_bin = np.digitize(test_pred, edges)
     widths = np.array(
         [
-            _conformal_quantile(resid[cal_bin == b], level)
+            conformal_quantile(resid[cal_bin == b], level)
             if (cal_bin == b).sum() > 1 / (1 - level)
-            else _conformal_quantile(resid, level)
+            else conformal_quantile(resid, level)
             for b in range(len(edges) + 1)
         ]
     )

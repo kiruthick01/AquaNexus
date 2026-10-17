@@ -114,3 +114,24 @@ def test_binned_conformal_covers_near_nominal_on_fresh_data():
     pred, y = draw(6000)
     lo, hi = ex.binned_conformal_interval(cal_pred, cal_y, pred, level=0.9)
     assert ex.coverage(y, lo, hi)["coverage"] == pytest.approx(0.9, abs=0.03)
+
+
+def test_do_bundle_round_trips_and_returns_ordered_intervals(tmp_path):
+    from aquanexus.ml.do_bundle import DOBundle
+
+    rng = np.random.default_rng(0)
+    frame = pd.DataFrame({"a": rng.normal(size=400), "b": rng.normal(size=400)})
+    frame["dissolved_oxygen"] = 8 + frame["a"]
+    booster = ex.lgb.train(
+        {**ex.DEFAULT_PARAMS, "num_leaves": 7},
+        ex.lgb.Dataset(frame[["a", "b"]], frame["dissolved_oxygen"]),
+        num_boost_round=20,
+    )
+    bundle = DOBundle(booster, ["a", "b"], [6.0, 9.0], [1.5, 1.0, 0.8], 0.9, {"name": "t"})
+    bundle.save(tmp_path / "m")
+    loaded = DOBundle.load(tmp_path / "m")
+    out = loaded.predict(frame)
+    pd.testing.assert_frame_equal(out, bundle.predict(frame), check_exact=False, atol=1e-6)
+    assert (out["lower"] < out["prediction"]).all() and (out["prediction"] < out["upper"]).all()
+    with pytest.raises(KeyError):
+        loaded.predict(frame[["a"]])
