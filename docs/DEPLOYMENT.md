@@ -12,7 +12,7 @@ built on the development machine, which has no Docker. See
 ```bash
 # Backend
 pip install -e ".[ml,api]"
-python scripts/train_models.py                 # writes data/models/
+python scripts/save_do_model.py                # writes data/models/do/
 uvicorn aquanexus.api.app:app --reload         # http://localhost:8000
 
 # Frontend, in a second shell
@@ -96,17 +96,12 @@ that matter for a deployment:
 
 | Variable | Default | Notes |
 |---|---|---|
-| `DATA_DIR` | `<repo>/data` | Setting it moves `raw`, `processed`, `models`, `hecras`, `cache` with it. |
+| `DATA_DIR` | `<repo>/data` | Setting it moves `raw`, `processed`, `models`, `cache` with it. |
 | `MODELS_DIR` | `$DATA_DIR/models` | Set explicitly to override that. |
 | `CORS_ORIGINS` | the four local dev origins | Must include the deployed frontend's origin. |
 | `LOG_LEVEL` | `INFO` | |
 | `LOG_JSON` | `false` | |
 | `API_DEBUG` | `false` | |
-| `EXPLAIN_RATE_LIMIT` | `60` | Per client per minute, per worker. |
-| `EXPLAIN_CACHE_SIZE` | `256` | Explanations held in memory per process. |
-
-`HECRAS_EXE` is irrelevant to a deployment: HEC-RAS is Windows-only and is used
-to *generate* hydraulics, not to serve them. The container never runs it.
 
 ---
 
@@ -138,9 +133,9 @@ which a developer with a daemon can run unchanged):
 - The API image writing artefacts into a bind mount as its own non-root user,
   which is also what confirms `DATA_DIR` resolves to the mount rather than into
   site-packages.
-- `docker run` of the API against that mount: it loads both models — `status:
-  ok`, not `degraded` — and passes all 15 smoke checks, `/explain` with a
-  non-degenerate SHAP background and `/scenario_run` included.
+- `docker run` of the API against that mount: it loads both stand-in
+  bundles (`status: ok`, not `degraded`) and passes the smoke checks, including
+  contributions that sum to the prediction.
 - `docker run` of the frontend: every client route survives a reload,
   `/config.js` comes back `no-store` and carries the `API_BASE_URL` given at run
   time, restarting with a different one repoints the app with no rebuild, hashed
@@ -150,11 +145,11 @@ which a developer with a daemon can run unchanged):
   inferred from a `curl` of the published port.
 
 The models CI loads are **stand-ins** written by
-`scripts/make_stand_in_artifacts.py`: fabricated inputs pushed through the real
-trainers, so the manifest has the shape the API expects and none of the numbers
-mean anything. The real artefacts are build outputs of 9.5 GB of point cloud and
-a Windows-only HEC-RAS run, and cannot be in CI. Every stand-in manifest carries
-`"stand_in": true` and every model's first caveat begins `STAND-IN ARTEFACT`.
+`scripts/make_stand_in_artifacts.py`: toy models fitted to made-up data, so the
+bundle has the layout the API expects and none of the numbers mean anything. The
+real bundles come from 565,000 downloaded samples and cannot be in CI. Every
+stand-in `bundle.json` carries `"stand_in": true` and its held-out note begins
+`STAND-IN ARTEFACT`.
 
 On a machine that has the trained artefacts and a daemon, the same script runs
 against them instead of the stand-ins:
@@ -164,8 +159,8 @@ docker build -t aquanexus-api:dev . && docker build -t aquanexus-frontend:dev ./
 scripts/check_containers.sh --trained aquanexus-api:dev aquanexus-frontend:dev
 ```
 
-`--trained` mounts `./data` **read-only**, so the check cannot write over
-artefacts that took a Windows-only HEC-RAS run to produce.
+`--trained` mounts `./data` **read-only**, so the check cannot write over the
+trained bundles.
 
 **Still not verified:** that same run — this machine has the artefacts and no
 Docker — plus TLS and anything about a real deployment target; see the limits

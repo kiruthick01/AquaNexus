@@ -98,7 +98,10 @@ def add_history(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_neighbors(
-    frame: pd.DataFrame, radius_km: float = 25.0, window_days: int = 10
+    frame: pd.DataFrame,
+    radius_km: float = 25.0,
+    window_days: int = 10,
+    pool: pd.Series | np.ndarray | None = None,
 ) -> pd.DataFrame:
     """Neighbour-station features, never including the station's own readings.
 
@@ -106,11 +109,16 @@ def add_neighbors(
     last visit strictly before the sample date. ``nb_do_now``: mean over neighbours of
     the visit nearest in time, if within ``window_days``. ``nb_count`` is how many
     stations lie within the radius, a density proxy that does not use any DO value.
+
+    ``pool`` optionally restricts which rows may serve as neighbour observations (a
+    boolean per row of ``frame``). Evaluation uses it to keep held-out stations' labels
+    out of every feature, including the features of training rows.
     """
     stations = frame.drop_duplicates("station_id")[["station_id", "latitude", "longitude"]]
     pairs = geography.station_pairs(stations.reset_index(drop=True), radius_km)
 
-    visits = frame.groupby(["station_id", "date"], as_index=False)[TARGET].mean()
+    source = frame if pool is None else frame[np.asarray(pool, dtype=bool)]
+    visits = source.groupby(["station_id", "date"], as_index=False)[TARGET].mean()
     visits = visits.sort_values(["station_id", "date"])
     visits["running"] = visits.groupby("station_id")[TARGET].expanding().mean().to_numpy()
     obs = visits.rename(columns={"station_id": "neighbor_id", TARGET: "nb_do"})
@@ -155,8 +163,13 @@ def build_frame(
     raw_dir: Path | str,
     weather_dir: Path | str,
     elevation_cache: Path | str | None = None,
+    exclude_from_neighbors: set | None = None,
 ) -> pd.DataFrame:
-    """Samples + stations + weather + season + terrain + neighbours + history."""
+    """Samples + stations + weather + season + terrain + neighbours + history.
+
+    ``exclude_from_neighbors`` is a set of station ids whose readings may not feed any
+    row's neighbour features; evaluation passes its held-out stations.
+    """
     samples = moe.load_samples(moe.find_files(raw_dir, "mk"))
     stations = moe.load_stations(moe.find_files(raw_dir, "mm"))
     frame = moe.build_dataset(samples, stations)
@@ -167,7 +180,8 @@ def build_frame(
             pd.read_csv(elevation_cache), frame.drop_duplicates("station_id")
         )
         frame = frame.merge(terrain, on="station_id", how="left")
-    frame = add_neighbors(frame)
+    pool = None if not exclude_from_neighbors else ~frame["station_id"].isin(exclude_from_neighbors)
+    frame = add_neighbors(frame, pool=pool)
     return add_history(frame)
 
 

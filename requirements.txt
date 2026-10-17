@@ -1,5 +1,5 @@
 # Runtime dependencies. Install the project itself for the full set:
-#     pip install -e ".[ml,geo,api,dashboard,dev]"
+#     pip install -e ".[ml,geo,api,dev]"
 #
 # Pinned minimums are declared in pyproject.toml; this file mirrors the
 # core + ml + api extras for environments that cannot use PEP 621 extras.

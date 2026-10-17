@@ -136,3 +136,13 @@ def test_terrain_features_use_neighbouring_stations_for_relief():
     assert out.loc[3, "rel_elevation"] == pytest.approx(100.0 - 50.0)
     assert np.isnan(out.loc[4, "relief_10km"])
     assert out.loc[4, "elevation"] == 5.0
+
+
+def test_a_restricted_pool_keeps_excluded_stations_out_of_every_neighbour_feature():
+    network = _network()
+    pool = (network["station_id"] != 2).to_numpy()
+    out = features.add_neighbors(network, pool=pool)
+    near = out[out["station_id"] == 1]
+    assert near["nb_do_prior"].isna().all()
+    assert near["nb_do_now"].isna().all()
+    assert (near["nb_count"] == 1).all()  # density still counts the excluded station

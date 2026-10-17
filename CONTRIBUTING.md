@@ -9,20 +9,17 @@ have to reverse-engineer them from the diff.
 
 ```bash
 python -m venv .venv && .venv\Scripts\activate      # Windows; source .venv/bin/activate elsewhere
-pip install -e ".[ml,api,dev]"                      # add ",geo" for point clouds
-pytest                                              # 376 tests
+pip install -e ".[ml,api,dev]"
+pytest
 ruff check src tests scripts
 
-cd frontend && npm install && npm test              # 22 tests
+cd frontend && npm install && npm test
 ```
 
-The suite passes without any data: tests that need trained artefacts skip
-themselves and say why. To get the artefacts, see the rebuild sequence in
-`README.md` — the data is 9.5 GB of point cloud and is gitignored.
-
-HEC-RAS 7.x on Windows is needed only to *generate* hydraulics
-(`scripts/build_geometry.py`, `scripts/run_hecras.py`). Everything else runs
-anywhere.
+The suite passes without any data: API tests build toy models, and tests that need
+trained bundles skip themselves and say why. To get the real ones, follow the run
+sequence in `README.md`. The monitoring CSVs are downloaded by hand (see
+`docs/DATA_SOURCES.md`) and gitignored. Never scrape `river.go.jp`.
 
 ## What a change is expected to do
 
@@ -66,11 +63,10 @@ is the reason somebody will need in a year.
 
 | Path | Holds |
 |---|---|
-| `src/aquanexus/` | the package: data, hecras, ml, api |
+| `src/aquanexus/` | the package: data, ml, api |
 | `scripts/` | entry points that produce artefacts, each runnable alone |
 | `tests/` | pytest, mirroring the package plus deployment invariants |
-| `notebooks/` | executable narrative, committed unexecuted |
-| `docs/` | methodology, data sources, API, deployment, sensitivity studies |
+| `docs/` | data sources, results, deployment; old material in `docs/archive/` |
 | `frontend/` | React dashboard over the API |
 
 Generated artefacts (`data/`, `frontend/dist/`) are gitignored. The scripts that
