@@ -14,7 +14,7 @@ services:
       PYTHONPATH: /app/src
     volumes:
       # Source is mounted for reload; data is mounted so the container reads
-      # the same HEC-RAS outputs and trained models the host produced. Without
+      # the same trained model bundles the host produced. Without
       # the data mount the API starts degraded - no models are copied into the
       # image, by design, since they are build outputs rather than source.
       - ./src:/app/src:ro

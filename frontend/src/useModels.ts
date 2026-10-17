@@ -1,8 +1,7 @@
 /**
  * Model metadata, fetched once and shared.
  *
- * `/models` carries the provenance, metrics, caveats and training ranges every
- * page needs, so it is loaded at the top of the app rather than per page. A
+ * `/models` carries the held-out accuracy and feature importance every page needs, so it is loaded at the top of the app rather than per page. A
  * degraded backend - one that started without artefacts - returns 503 here, and
  * the message it gives is the one worth showing the user.
  */
@@ -10,14 +9,14 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api, ApiError } from "./services/api";
-import type { HealthResponse, ModelInfo, Target } from "./types";
+import type { HealthResponse, Mode, ModelInfo } from "./types";
 
 export interface ModelState {
   models: ModelInfo[];
   health: HealthResponse | null;
   loading: boolean;
   error: string | null;
-  byTarget: (target: Target) => ModelInfo | undefined;
+  byMode: (mode: Mode) => ModelInfo | undefined;
   reload: () => void;
 }
 
@@ -62,8 +61,8 @@ export function useModels(): ModelState {
     };
   }, [attempt]);
 
-  const byTarget = useCallback(
-    (target: Target) => models.find((model) => model.target === target),
+  const byMode = useCallback(
+    (mode: Mode) => models.find((model) => model.mode === mode),
     [models],
   );
 
@@ -72,7 +71,7 @@ export function useModels(): ModelState {
     health,
     loading,
     error,
-    byTarget,
+    byMode,
     reload: () => setAttempt((n) => n + 1),
   };
 }

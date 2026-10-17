@@ -1,26 +1,76 @@
-/**
- * Types mirroring `aquanexus.api.schemas`.
- *
- * `labels` is the field that matters most here: one of the two served models is
- * trained on labels this project generated, and every component that renders a
- * number is expected to render its provenance beside it.
- */
+/** Shapes returned by the AquaNexus API. They mirror src/aquanexus/api/schemas.py. */
 
-export type Target = "dissolved_oxygen" | "hsi";
-export type Labels = "observed" | "SYNTHETIC";
+export type Mode = "geo" | "nowcast" | "full" | "full_alert";
 
-export interface EnvironmentalState {
-  water_temp?: number;
-  air_temp?: number;
-  dissolved_oxygen?: number;
-  discharge?: number;
-  depth?: number;
-  velocity?: number;
-  suspended_solids?: number;
-  ph?: number;
-  nitrogen_total?: number;
-  phosphorus_total?: number;
-  month?: number;
+export interface HealthResponse {
+  status: "ok" | "degraded";
+  version: string;
+  models_loaded: string[];
+  stations: number;
+  detail: string | null;
+}
+
+export interface HeldOut {
+  n?: number;
+  r2?: number;
+  mae?: number;
+  rmse?: number;
+  mae_low?: number;
+  recall_low?: number;
+  precision_low?: number;
+}
+
+export interface ModelInfo {
+  mode: Mode;
+  summary: string;
+  features: string[];
+  low_do_weight: number;
+  trained_on: { rows?: number; stations?: number; source?: string; rounds?: number };
+  held_out_strict: HeldOut;
+  held_out_note: string;
+  importance: Record<string, number>;
+  interval_half_widths: number[];
+  interval_bin_edges: number[];
+  built: string;
+  commit: string;
+}
+
+export interface StationInfo {
+  station_id: number;
+  name: string | null;
+  water_body: string | null;
+  pref_code: number;
+  latitude: number;
+  longitude: number;
+  elevation: number | null;
+  last_date: string;
+  last_do: number;
+  station_do_mean: number;
+  station_do_n: number;
+}
+
+export type Weather = Partial<{
+  air_temp: number;
+  air_temp_3d: number;
+  air_temp_7d: number;
+  air_temp_30d: number;
+  rain_1d: number;
+  rain_3d: number;
+  rain_7d: number;
+  rain_14d: number;
+  rain_30d: number;
+  days_since_rain: number;
+  solar: number;
+  wind: number;
+}>;
+
+export interface PredictionRequest {
+  date: string;
+  mode: Mode;
+  station_id?: number;
+  location?: { latitude?: number; longitude?: number };
+  weather?: Weather;
+  explain?: boolean;
 }
 
 export interface RangeWarning {
@@ -31,118 +81,15 @@ export interface RangeWarning {
 }
 
 export interface PredictionResponse {
-  target: Target;
+  mode: Mode;
   prediction: number;
-  unit: string;
+  lower: number;
+  upper: number;
+  level: number;
   interpretation: string;
-  labels: Labels;
-  uncertainty: number | null;
+  missing_features: string[];
   out_of_range: RangeWarning[];
   contributions: Record<string, number> | null;
+  notes: string[];
   caveats: string[];
-}
-
-export interface BatchPredictionResponse {
-  target: Target;
-  unit: string;
-  labels: Labels;
-  n: number;
-  predictions: number[];
-  out_of_range_count: number;
-  caveats: string[];
-}
-
-export interface FeatureContribution {
-  feature: string;
-  contribution: number;
-  value: number | null;
-}
-
-export interface ExplanationResponse {
-  target: Target;
-  prediction: number;
-  baseline: number;
-  contributions: FeatureContribution[];
-  collinear_pairs: string[][];
-  caveats: string[];
-}
-
-export interface ScenarioResponse {
-  scenario_name: string;
-  target: Target;
-  unit: string;
-  labels: Labels;
-  baseline_prediction: number;
-  scenario_prediction: number;
-  change: number;
-  percent_change: number | null;
-  applied: Record<string, number>;
-  /** Hydraulics re-interpolated from the sweep at the scenario's discharge. */
-  derived: Record<string, number>;
-  interpretation: string;
-  out_of_range: RangeWarning[];
-  caveats: string[];
-}
-
-export interface ModelInfo {
-  target: Target;
-  unit: string;
-  model_type: string;
-  labels: Labels;
-  n_train: number;
-  features: string[];
-  metrics: Record<string, number | string>;
-  caveats: string[];
-  /** Observed [min, max] per feature, so a client can show where evidence ends. */
-  training_ranges: Record<string, number[]>;
-  /** Observed [min, max] of the predicted quantity, for the gauge staff. */
-  target_range: number[];
-}
-
-/** One scored row of the held-out river result. */
-export interface TransferScore {
-  label: string;
-  n: number;
-  rmse: number;
-  mae: number | null;
-  r2: number;
-  bias: number;
-}
-
-export interface TransferStation {
-  sub_reach: string;
-  station: string;
-  n: number;
-  mean_discharge: number;
-  observed_do: number;
-  rmse: number;
-  r2: number;
-  bias: number;
-  /** Whether the model was ever shown flows like this one. */
-  in_training_range: boolean;
-}
-
-export interface HoldoutResponse {
-  river: string;
-  river_ja: string;
-  trained_on: string;
-  n: number;
-  n_stations: number;
-  generated: string;
-  /** The split reading. The pooled score alone is the misleading version. */
-  headline: string;
-  pooled: TransferScore[];
-  by_evidence: TransferScore[];
-  by_station: TransferStation[];
-  home_metrics: Record<string, number | string>;
-  document: string;
-  caveats: string[];
-}
-
-export interface HealthResponse {
-  status: "ok" | "degraded";
-  version: string;
-  river: string;
-  models_loaded: string[];
-  detail: string | null;
 }

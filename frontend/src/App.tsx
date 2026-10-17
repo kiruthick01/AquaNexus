@@ -2,26 +2,22 @@
  * Application shell: masthead, routes, and the degraded-backend banner.
  *
  * Model metadata is fetched once here and passed down, so every page shows the
- * same provenance and the same training ranges.
+ * same held-out accuracy.
  */
 
 import { NavLink, Route, Routes } from "react-router-dom";
 
 import About from "./pages/About";
-import Analyze from "./pages/Analyze";
 import Home from "./pages/Home";
+import Models from "./pages/Models";
 import Predict from "./pages/Predict";
-import Scenarios from "./pages/Scenarios";
-import Transfer from "./pages/Transfer";
 import { API_BASE } from "./services/api";
 import { useModels } from "./useModels";
 
 const NAV = [
   { to: "/", label: "Overview", end: true },
   { to: "/predict", label: "Predict" },
-  { to: "/scenarios", label: "Scenarios" },
-  { to: "/analyze", label: "Analyze" },
-  { to: "/transfer", label: "Transfer" },
+  { to: "/models", label: "Models" },
   { to: "/about", label: "About" },
 ];
 
@@ -35,15 +31,13 @@ export default function App() {
           <div className="masthead-top">
             <NavLink to="/" className="wordmark">
               <b>AquaNexus</b>
-              <span>綾瀬川 Ayase River, Saitama</span>
+              <span>Dissolved oxygen in Japanese rivers</span>
             </NavLink>
-            <span
-              className={`station ${models.health?.status === "ok" ? "" : "down"}`}
-            >
+            <span className={`station ${models.health?.status === "ok" ? "" : "down"}`}>
               <i aria-hidden="true" />
               {models.health
                 ? models.health.status === "ok"
-                  ? `${models.health.models_loaded.length} models loaded`
+                  ? `${models.health.models_loaded.length} models, ${models.health.stations.toLocaleString()} stations`
                   : "running without models"
                 : "connecting to the API"}
             </span>
@@ -69,9 +63,8 @@ export default function App() {
             <strong>The API is not answering with models.</strong> {models.error}
             <div className="small" style={{ marginTop: "0.35rem" }}>
               Expected at <code>{API_BASE}</code>. Start it with{" "}
-              <code>uvicorn aquanexus.api.app:app --reload</code>, and if it
-              reports no models, run <code>python scripts/train_models.py</code>{" "}
-              first.{" "}
+              <code>uvicorn aquanexus.api.app:app --reload</code>, and if it reports no
+              models, run <code>python scripts/save_do_model.py</code> first.{" "}
               <button
                 type="button"
                 className="secondary"
@@ -84,18 +77,12 @@ export default function App() {
           </div>
         )}
 
-        {models.loading && !models.error && (
-          <p className="spinner">Loading model metadata…</p>
-        )}
+        {models.loading && !models.error && <p className="spinner">Loading model metadata…</p>}
 
         <Routes>
           <Route path="/" element={<Home models={models} />} />
           <Route path="/predict" element={<Predict models={models} />} />
-          <Route path="/scenarios" element={<Scenarios models={models} />} />
-          <Route path="/analyze" element={<Analyze models={models} />} />
-          {/* Not passed `models`: the transfer result is a record of an
-              experiment, and the API serves it even when no model is loaded. */}
-          <Route path="/transfer" element={<Transfer />} />
+          <Route path="/models" element={<Models models={models} />} />
           <Route path="/about" element={<About />} />
           <Route
             path="*"
@@ -112,13 +99,8 @@ export default function App() {
       <footer className="footer">
         <div className="footer-inner">
           <p>
-            Channel geometry from 埼玉県 河川点群データ (CC BY 4.0). Water quality
-            from 環境省 and 埼玉県 公共用水域水質測定. Weather from 気象庁.
-          </p>
-          <p style={{ marginTop: "0.4rem" }}>
-            This is a proof of concept, not regulatory advice. The habitat index
-            is trained on labels this project generated, and the oxygen model is
-            unreliable below about 2 m³/s.
+            Water quality from 環境省 公共用水域水質測定 (FY2013-22). Weather from NASA POWER.
+            Elevation from 国土地理院. Proof of concept, not regulatory advice.
           </p>
         </div>
       </footer>

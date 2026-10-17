@@ -1,25 +1,20 @@
 /**
  * Typed client for the AquaNexus API.
  *
- * `fetch` rather than axios (which AQUANEXUS-PLAN.md §4a names): the client is
- * a hundred lines of request building, the platform has had `fetch` for years,
- * and a dependency here would need mocking in every component test.
+ * `fetch` rather than axios: the client is a hundred lines of request building and
+ * a dependency here would need mocking in every component test.
  *
  * Errors carry the API's own `detail` string. The backend answers 503 with a
- * reason when a model or its explainer is unavailable, and that reason is far
- * more useful to a user than "request failed".
+ * reason when a model is unavailable, and that reason is far more useful to a user
+ * than "request failed".
  */
 
 import type {
-  BatchPredictionResponse,
-  EnvironmentalState,
-  ExplanationResponse,
   HealthResponse,
-  HoldoutResponse,
   ModelInfo,
+  PredictionRequest,
   PredictionResponse,
-  ScenarioResponse,
-  Target,
+  StationInfo,
 } from "../types";
 
 declare global {
@@ -104,27 +99,8 @@ export const api = {
 
   models: () => request<ModelInfo[]>("/models"),
 
-  holdout: () => request<HoldoutResponse>("/holdout"),
+  stations: (query: string, limit = 12) =>
+    request<StationInfo[]>(`/stations?q=${encodeURIComponent(query)}&limit=${limit}`),
 
-  predict: (state: EnvironmentalState, target: Target, explain = false) =>
-    post<PredictionResponse>("/predict", { state, target, explain }),
-
-  batchPredict: (states: EnvironmentalState[], target: Target) =>
-    post<BatchPredictionResponse>("/batch_predict", { states, target }),
-
-  explain: (state: EnvironmentalState, target: Target) =>
-    post<ExplanationResponse>("/explain", { state, target }),
-
-  scenario: (
-    baseline: EnvironmentalState,
-    modifications: Record<string, number>,
-    target: Target,
-    scenarioName: string,
-  ) =>
-    post<ScenarioResponse>("/scenario_run", {
-      scenario_name: scenarioName,
-      baseline,
-      modifications,
-      target,
-    }),
+  predict: (payload: PredictionRequest) => post<PredictionResponse>("/predict", payload),
 };
