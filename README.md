@@ -8,6 +8,7 @@ survey (5,883 river stations, all 47 prefectures, fiscal years 2013-22), joined 
 weather and station elevation. Every accuracy figure comes from stations the model never
 saw, in years after the ones it trained on. A FastAPI service serves the models with
 90% prediction intervals and exact per-feature contributions; a React dashboard sits on top.
+A one-page summary is in [`docs/WRITEUP.md`](docs/WRITEUP.md).
 
 > This replaces an earlier version that trained on 138 samples from two Saitama rivers and
 > a synthetic habitat index. That version is preserved at the git tag `legacy-ayase-naka`
