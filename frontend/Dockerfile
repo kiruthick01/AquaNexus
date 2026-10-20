@@ -29,7 +29,7 @@ COPY src/ ./src/
 RUN npm run build
 
 
-FROM nginx:1.27-alpine AS serve
+FROM nginx:1.31-alpine AS serve
 
 # The app is a single-page router: /predict is a client route, not a file, so
 # nginx must fall back to index.html rather than answering 404.
