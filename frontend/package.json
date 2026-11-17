@@ -21,7 +21,7 @@
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
-    "@testing-library/user-event": "^14.6.8",
+    "@testing-library/user-event": "^14.6.10",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -29,7 +29,7 @@
     "jsdom": "^26.1.0",
     "oxlint": "^1.93.0",
     "typescript": "~6.0.2",
-    "vite": "^8.3.7",
+    "vite": "^8.3.8",
     "vitest": "^5.1.0"
   }
 }
